@@ -1,0 +1,201 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  telegramId  String   @unique
+  username    String?
+  firstName   String?
+  lastName    String?
+  language    String   @default("id")
+  timezone    String   @default("Asia/Jakarta")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses      Expense[]
+  incomes       Income[]
+  budgets       Budget[]
+  categories    Category[]
+  wallet        Wallet?
+  conversations Conversation[]
+  vouchers      Voucher[]
+
+  @@map("users")
+}
+
+model Expense {
+  id                    String        @id @default(cuid())
+  userId                String
+  amount                Float
+  description           String
+  categoryId            String
+  calculationExpression String?
+  receiptImageUrl       String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+  items    ExpenseItem[]
+
+  @@map("expenses")
+}
+
+model ExpenseItem {
+  id         String  @id @default(cuid())
+  expenseId  String
+  name       String
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@map("expense_items")
+}
+
+model Income {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Float
+  description String
+  categoryId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@map("incomes")
+}
+
+model Category {
+  id        String      @id @default(cuid())
+  name      String
+  type      CategoryType
+  isDefault Boolean     @default(false)
+  userId    String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+  incomes  Income[]
+  budgets  Budget[]
+
+  @@map("categories")
+}
+
+model Budget {
+  id         String       @id @default(cuid())
+  userId     String
+  categoryId String
+  amount     Float
+  period     BudgetPeriod
+  startDate  DateTime
+  endDate    DateTime
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@map("budgets")
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  coins     Float    @default(0) // Float to support fractional coins (e.g., 0.5 coins per transaction)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+model Voucher {
+  id        String      @id @default(cuid())
+  code      String      @unique
+  type      VoucherType
+  value     Float
+  isUsed    Boolean     @default(false)
+  usedBy    String?
+  usedAt    DateTime?
+  expiresAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user User? @relation(fields: [usedBy], references: [id])
+
+  @@map("vouchers")
+}
+
+model Conversation {
+  id          String      @id @default(cuid())
+  userId      String
+  message     String
+  response    String
+  messageType MessageType
+  toolUsed    String?
+  coinsUsed   Float?
+  createdAt   DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("conversations")
+}
+
+enum CategoryType {
+  EXPENSE
+  INCOME
+}
+
+enum BudgetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum VoucherType {
+  COINS
+  BALANCE
+  DISCOUNT
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  PHOTO
+}
+
+enum ConversationType {
+  EXPENSE_ENTRY
+  INCOME_ENTRY
+  BUDGET_SETUP
+  GENERAL_QUERY
+}
+
+enum ConversationStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}

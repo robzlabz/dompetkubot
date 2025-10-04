@@ -1,20 +1,20 @@
 # Implementation Plan
 
-- [ ] 1. Set up project structure and core interfaces
+- [x] 1. Set up project structure and core interfaces
   - Create directory structure for models, services, repositories, and API components
   - Set up Bun + TypeScript + Zod configuration
   - Configure Prisma with PostgreSQL connection
   - Define interfaces that establish system boundaries
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1, 11.1, 12.1, 13.1, 14.1_
 
-- [ ] 2. Implement database schema and core data models
-- [ ] 2.1 Create Prisma schema with all entities
+- [-] 2. Implement database schema and core data models
+- [x] 2.1 Create Prisma schema with all entities
   - Define User, Expense, Income, Category, Budget, Wallet, Voucher, Conversation models
   - Set up relationships and constraints
   - Configure float precision for coins and monetary values
   - _Requirements: 1.1, 4.1, 5.1, 6.1, 11.1, 12.1, 13.1_
 
-- [ ] 2.2 Implement Zod validation schemas
+- [x] 2.2 Implement Zod validation schemas
   - Create validation schemas for all data models
   - Add input validation for API endpoints
   - Implement mathematical expression validation
@@ -25,13 +25,13 @@
   - Test model relationships and constraints
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1, 11.1, 12.1, 13.1, 14.1_
 
-- [ ] 3. Create repository layer with Prisma
-- [ ] 3.1 Implement base repository pattern
+- [-] 3. Create repository layer with Prisma
+- [x] 3.1 Implement base repository pattern
   - Create generic BaseRepository with CRUD operations
   - Implement error handling and transaction support
   - _Requirements: 1.1, 4.1, 5.1, 6.1, 11.1, 12.1, 13.1_
 
-- [ ] 3.2 Implement specific repositories
+- [-] 3.2 Implement specific repositories
   - Create ExpenseRepository, IncomeRepository, CategoryRepository
   - Implement BudgetRepository, WalletRepository, VoucherRepository
   - Add ConversationRepository for chat history
@@ -71,20 +71,20 @@
   - Test mathematical calculations and categorization
   - _Requirements: 1.1, 4.1, 6.1, 7.1, 8.1_
 
-- [ ] 5. Implement budget and wallet services
-- [ ] 5.1 Create budget management service
+- [x] 5. Implement budget and wallet services
+- [x] 5.1 Create budget management service
   - Implement BudgetService with budget setting and monitoring
   - Add budget alert system (80% and 100% thresholds)
   - Calculate spending vs budget ratios
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 5.2 Implement wallet and coin system
+- [x] 5.2 Implement wallet and coin system
   - Create WalletService with float-based coin support
   - Implement balance addition and coin deduction
   - Add insufficient balance handling
   - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
 
-- [ ] 5.3 Create voucher redemption service
+- [x] 5.3 Create voucher redemption service
   - Implement VoucherService with one-time redemption
   - Add voucher validation and usage tracking
   - Support different voucher types (coins, balance, discount)
