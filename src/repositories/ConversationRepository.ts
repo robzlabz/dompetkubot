@@ -78,6 +78,22 @@ export class ConversationRepository extends BaseRepository<IConversation, Omit<I
     }
   }
 
+  async update(id: string, conversationData: Partial<IConversation>): Promise<IConversation> {
+    try {
+      const sanitizedData = this.sanitizeData(conversationData);
+      
+      const conversation = await this.prisma.conversation.update({
+        where: { id },
+        data: sanitizedData,
+      });
+
+      return this.mapToInterface(conversation);
+    } catch (error) {
+      this.handleError(error, `Failed to update conversation: ${id}`);
+      throw error;
+    }
+  }
+
   async delete(id: string): Promise<void> {
     try {
       await this.prisma.conversation.delete({

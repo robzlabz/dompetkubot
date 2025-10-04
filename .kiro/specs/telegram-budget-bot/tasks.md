@@ -25,13 +25,13 @@
   - Test model relationships and constraints
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1, 11.1, 12.1, 13.1, 14.1_
 
-- [-] 3. Create repository layer with Prisma
+- [x] 3. Create repository layer with Prisma
 - [x] 3.1 Implement base repository pattern
   - Create generic BaseRepository with CRUD operations
   - Implement error handling and transaction support
   - _Requirements: 1.1, 4.1, 5.1, 6.1, 11.1, 12.1, 13.1_
 
-- [-] 3.2 Implement specific repositories
+- [x] 3.2 Implement specific repositories
   - Create ExpenseRepository, IncomeRepository, CategoryRepository
   - Implement BudgetRepository, WalletRepository, VoucherRepository
   - Add ConversationRepository for chat history

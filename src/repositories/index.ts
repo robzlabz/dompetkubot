@@ -1,4 +1,5 @@
 // Repository layer exports - data access implementations
+export { BaseRepository } from './BaseRepository.js';
 export { UserRepository } from './UserRepository.js';
 export { ExpenseRepository } from './ExpenseRepository.js';
 export { IncomeRepository } from './IncomeRepository.js';
