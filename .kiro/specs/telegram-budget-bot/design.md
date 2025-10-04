@@ -217,7 +217,7 @@ interface CategoryService {
 ```typescript
 interface WalletService {
   addBalance(userId: string, amount: number): Promise<Wallet>
-  deductCoins(userId: string, amount: number): Promise<Wallet>
+  deductCoins(userId: string, amount: number): Promise<Wallet> // Supports float values (e.g., 0.5)
   getBalance(userId: string): Promise<Wallet>
   checkSufficientBalance(userId: string, requiredCoins: number): Promise<boolean>
 }
@@ -361,7 +361,7 @@ interface Wallet {
   id: string
   userId: string
   balance: number
-  coins: number
+  coins: number // Float to support fractional coins (e.g., 0.5 coins per transaction)
   createdAt: Date
   updatedAt: Date
 }
@@ -522,7 +522,16 @@ interface ErrorResponse {
 - **Cleanup**: Automatic test data cleanup between tests
 - **Seeding**: Default categories and test users
 
-## Performance Considerations
+## Group Functionality Considerations
+
+### Group vs Private Chat Design
+
+The bot is designed primarily for individual financial management, but group functionality presents interesting opportunities and challenges:
+
+#### Potential Group Use Cases
+1. **Family Budget Management**: Shared family expenses and budgets
+2. **Roommate Expense Splitting**: Shared household costs
+3. **Team/Office Expenses**: Small team expense 
 
 ### Database Optimization
 - **Indexing**: Strategic indexes on frequently queried fields
@@ -546,3 +555,115 @@ interface ErrorResponse {
 - **Database Sharding**: Plan for user-based sharding if needed
 - **Queue System**: Implement job queues for heavy processing tasks
 - **Monitoring**: Comprehensive monitoring and alerting
+#
+# Group Functionality Considerations
+
+### Group vs Private Chat Design
+
+The bot is designed primarily for individual financial management, but group functionality presents interesting opportunities and challenges:
+
+#### Potential Group Use Cases
+1. **Family Budget Management**: Shared family expenses and budgets
+2. **Roommate Expense Splitting**: Shared household costs
+3. **Team/Office Expenses**: Small team expense tracking
+4. **Travel Groups**: Shared vacation or trip expenses
+
+#### Coin System in Groups - Design Options
+
+**Option 1: Individual Coin Deduction**
+- Each user pays their own coins for premium features
+- When someone uses voice/OCR in group, only their coins are deducted
+- Pros: Fair individual cost, simple implementation
+- Cons: May discourage usage if only one person has coins
+
+**Option 2: Shared Group Wallet**
+- Group has a collective coin pool that members can contribute to
+- Premium features deduct from group wallet
+- Pros: Encourages group participation, shared cost
+- Cons: Complex permission management, potential conflicts
+
+**Option 3: Hybrid Approach**
+- Try individual coins first, fallback to group wallet if available
+- Group admin can set policies (e.g., "group pays for receipts")
+- Pros: Flexible, accommodates different group dynamics
+- Cons: Most complex to implement
+
+#### Recommended Group Implementation Strategy
+
+**Phase 1: Individual-First Design**
+```typescript
+interface GroupContext {
+  chatId: string
+  chatType: 'private' | 'group' | 'supergroup'
+  userId: string // The user who triggered the action
+  groupSettings?: GroupSettings
+}
+
+interface GroupSettings {
+  id: string
+  chatId: string
+  allowSharedExpenses: boolean
+  defaultSplitMethod: 'EQUAL' | 'CUSTOM' | 'BY_INCOME'
+  coinPaymentMethod: 'INDIVIDUAL' | 'GROUP_WALLET' | 'HYBRID'
+  adminUserIds: string[]
+}
+```
+
+**Group-Specific Features to Consider:**
+1. **Expense Attribution**: "Siapa yang beli kopi ini?" - AI asks for clarification
+2. **Split Calculations**: Automatic expense splitting among group members
+3. **Group Budgets**: Shared budgets for common expenses
+4. **Permission System**: Group admins can manage settings
+5. **Notification Control**: Users can opt-in/out of group notifications
+
+#### Group Data Models
+
+```typescript
+interface GroupExpense extends Expense {
+  groupChatId: string
+  paidBy: string // User who paid
+  splitAmong: ExpenseSplit[]
+  isSharedExpense: boolean
+}
+
+interface ExpenseSplit {
+  userId: string
+  amount: number
+  percentage?: number
+  isPaid: boolean
+}
+
+interface GroupWallet {
+  id: string
+  groupChatId: string
+  totalCoins: number
+  contributions: GroupWalletContribution[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface GroupWalletContribution {
+  id: string
+  groupWalletId: string
+  userId: string
+  coinsContributed: number
+  createdAt: Date
+}
+```
+
+#### Group Coin Usage Recommendations
+
+For your consideration, I recommend **Option 1 (Individual Coin Deduction)** for the initial implementation because:
+
+1. **Simplicity**: Easier to implement and understand
+2. **Fairness**: Each person pays for their own premium usage
+3. **Privacy**: Individual financial data remains separate
+4. **Scalability**: Works regardless of group size
+
+**Implementation Details:**
+- When user uses voice/OCR in group: deduct from their personal coins
+- If insufficient coins: private message suggesting to add balance
+- Group members can see the expense result, but coin deduction is individual
+- Future enhancement: allow voluntary coin sharing/gifting between users
+
+This approach maintains the individual-focused design while enabling group collaboration without complex shared wallet management.
