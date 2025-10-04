@@ -15,6 +15,11 @@ import { WalletRepository } from './repositories/WalletRepository.js';
 import { ExpenseRepository } from './repositories/ExpenseRepository.js';
 import { IncomeRepository } from './repositories/IncomeRepository.js';
 import { CategoryRepository } from './repositories/CategoryRepository.js';
+import { UserRepository } from './repositories/UserRepository.js';
+import { UserService } from './services/UserService.js';
+import { CategoryService } from './services/CategoryService.js';
+import { EncryptionService } from './services/EncryptionService.js';
+import { PrivacyService } from './services/PrivacyService.js';
 import { PrismaClient } from '@prisma/client';
 
 let botService: TelegramBotService | null = null;
@@ -38,6 +43,7 @@ async function main() {
     const expenseRepo = new ExpenseRepository(prisma);
     const incomeRepo = new IncomeRepository(prisma);
     const categoryRepo = new CategoryRepository(prisma);
+    const userRepo = new UserRepository(prisma);
 
     // Initialize services
     const openAIService = new OpenAIService(conversationRepo);
@@ -49,6 +55,10 @@ async function main() {
     const calculationService = new CalculationService();
     const walletService = new WalletService(walletRepo, expenseRepo, incomeRepo);
     const expenseService = new ExpenseService(expenseRepo, categoryRepo, calculationService);
+    const encryptionService = new EncryptionService();
+    const categoryService = new CategoryService(categoryRepo, openAIService);
+    const userService = new UserService(userRepo, walletRepo, categoryService);
+    const privacyService = new PrivacyService(userRepo, expenseRepo, incomeRepo, conversationRepo, walletRepo, encryptionService);
 
     // Initialize bot service
     botService = new TelegramBotService(
@@ -58,7 +68,8 @@ async function main() {
       sttService,
       walletService,
       ocrService,
-      expenseService
+      expenseService,
+      userService
     );
 
     // Start the bot

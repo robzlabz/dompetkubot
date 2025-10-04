@@ -10,6 +10,7 @@ const envSchema = z.object({
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().default('gpt-3.5-turbo'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  ENCRYPTION_KEY: z.string().optional(), // 64 hex characters (32 bytes)
 });
 
 export type Environment = z.infer<typeof envSchema>;
