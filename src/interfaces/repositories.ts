@@ -33,6 +33,8 @@ export interface ICategoryRepository {
   findById(id: string): Promise<ICategory | null>;
   findByUserId(userId: string): Promise<ICategory[]>;
   findDefaultCategories(): Promise<ICategory[]>;
+  findByType(type: 'EXPENSE' | 'INCOME', userId?: string): Promise<ICategory[]>;
+  findByName(name: string, userId?: string): Promise<ICategory | null>;
   create(categoryData: Omit<ICategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<ICategory>;
   update(id: string, categoryData: Partial<ICategory>): Promise<ICategory>;
   delete(id: string): Promise<void>;

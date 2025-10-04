@@ -7,6 +7,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
+  OPENAI_BASE_URL: z.string().url().optional(),
+  OPENAI_MODEL: z.string().default('gpt-3.5-turbo'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 });
 

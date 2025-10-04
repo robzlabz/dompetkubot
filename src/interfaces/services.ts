@@ -113,6 +113,27 @@ export interface IAIService {
   classifyTransactionCategory(description: string, language: string): Promise<string>;
 }
 
+export interface IVoucherService {
+  redeemVoucher(code: string, userId: string): Promise<{
+    voucher: any;
+    success: boolean;
+    message: string;
+    benefitApplied: {
+      type: 'COINS' | 'BALANCE' | 'DISCOUNT';
+      value: number;
+    };
+  }>;
+  validateVoucher(code: string): Promise<any | null>;
+  markVoucherAsUsed(voucherId: string, userId: string): Promise<void>;
+  getUserVouchers(userId: string): Promise<any[]>;
+  createVoucher(voucherData: {
+    code: string;
+    type: 'COINS' | 'BALANCE' | 'DISCOUNT';
+    value: number;
+    expiresAt?: Date;
+  }): Promise<any>;
+}
+
 export interface IConversationService {
   startConversation(userId: string, type: 'EXPENSE_ENTRY' | 'INCOME_ENTRY' | 'BUDGET_SETUP' | 'GENERAL_QUERY'): Promise<IConversation>;
   addMessage(conversationId: string, role: 'USER' | 'ASSISTANT' | 'SYSTEM', content: string): Promise<void>;

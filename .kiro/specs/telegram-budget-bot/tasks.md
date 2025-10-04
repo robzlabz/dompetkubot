@@ -42,25 +42,25 @@
   - Test complex queries and relationships
   - _Requirements: 1.1, 4.1, 5.1, 6.1, 11.1, 12.1, 13.1_
 
-- [ ] 4. Implement core service layer
-- [ ] 4.1 Create mathematical calculation service
+- [x] 4. Implement core service layer
+- [x] 4.1 Create mathematical calculation service
   - Implement expression parser for "5kg @ 10rb" format
   - Handle various Indonesian number formats and expressions
   - Support multiplication, addition, and unit calculations
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 4.2 Implement expense management service
+- [x] 4.2 Implement expense management service
   - Create ExpenseService with CRUD operations
   - Integrate mathematical calculations
   - Handle itemized expenses from receipts
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 7.1, 7.2, 7.3, 7.4, 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 4.3 Implement income management service
+- [x] 4.3 Implement income management service
   - Create IncomeService for income tracking
   - Support automatic categorization
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 4.4 Implement category service with AI categorization
+- [x] 4.4 Implement category service with AI categorization
   - Create CategoryService with default Indonesian categories
   - Implement AI-powered automatic categorization
   - Support custom category creation and management
@@ -96,20 +96,20 @@
   - Test voucher redemption logic
   - _Requirements: 5.1, 11.1, 12.1_
 
-- [ ] 6. Set up OpenAI integration and AI routing
-- [ ] 6.1 Create OpenAI service with configurable endpoint
+- [x] 6. Set up OpenAI integration and AI routing
+- [x] 6.1 Create OpenAI service with configurable endpoint
   - Set up OpenAI client with custom endpoint support
   - Implement conversation context management
   - Add error handling and fallback strategies
   - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 13.1, 13.2, 13.3, 13.4, 13.5_
 
-- [ ] 6.2 Implement AI tool registry and routing system
+- [x] 6.2 Implement AI tool registry and routing system
   - Create Tool interface and ToolRegistry
   - Implement AI router that maps Indonesian text to tools
   - Add conversation context for better routing decisions
   - _Requirements: 1.1, 4.1, 6.5, 7.1, 11.1, 12.1_
 
-- [ ] 6.3 Create AI tools for each feature
+- [x] 6.3 Create AI tools for each feature
   - Implement CreateExpenseTool, EditExpenseTool, CreateIncomeTool
   - Create SetBudgetTool, AddBalanceTool, RedeemVoucherTool
   - Add CategoryManagementTool for category operations
@@ -121,14 +121,14 @@
   - Mock OpenAI responses for consistent testing
   - _Requirements: 1.1, 4.1, 6.1, 7.1, 11.1, 12.1_
 
-- [ ] 7. Implement response formatting system
-- [ ] 7.1 Create response formatter with nanoid integration
+- [x] 7. Implement response formatting system
+- [x] 7.1 Create response formatter with nanoid integration
   - Implement the specific response format: "[check] berhasil tercatat! `nanoid()` [details] [comment]"
   - Add personalized AI comment generation in Bahasa Indonesia
   - Support itemized response formatting for receipts
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 7.2 Implement calculation display in responses
+- [x] 7.2 Implement calculation display in responses
   - Show mathematical calculations in responses
   - Format Indonesian Rupiah properly
   - Display itemized breakdowns for complex purchases
@@ -140,26 +140,26 @@
   - Test calculation display formatting
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 8. Set up GramIO bot framework
-- [ ] 8.1 Initialize GramIO bot with TypeScript
+- [x] 8. Set up GramIO bot framework
+- [x] 8.1 Initialize GramIO bot with TypeScript
   - Set up GramIO bot instance with proper configuration
   - Configure middleware for logging and error handling
   - Set up message routing for different input types
   - _Requirements: 1.1, 2.1, 3.1, 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 8.2 Implement text message handling
+- [x] 8.2 Implement text message handling
   - Create handlers for natural language text input
   - Integrate with AI routing system
   - Add conversation storage for context
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 13.1, 13.2, 13.3, 13.4, 13.5_
 
-- [ ] 8.3 Add voice message processing
+- [x] 8.3 Add voice message processing
   - Implement speech-to-text integration
   - Add coin deduction for voice processing
   - Route transcribed text through AI system
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 11.3, 11.4_
 
-- [ ] 8.4 Implement photo/receipt processing
+- [x] 8.4 Implement photo/receipt processing
   - Add OCR integration for receipt scanning
   - Parse itemized receipt data with discounts
   - Deduct coins for OCR processing
@@ -171,7 +171,7 @@
   - Test coin deduction for premium features
   - _Requirements: 1.1, 2.1, 3.1, 11.3, 11.4_
 
-- [ ] 9. Implement user management and authentication
+- [-] 9. Implement user management and authentication
 - [ ] 9.1 Create user registration and authentication
   - Implement user registration on first interaction
   - Add Telegram ID verification
