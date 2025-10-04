@@ -30,6 +30,10 @@ class EnvironmentConfig {
     return EnvironmentConfig.instance;
   }
 
+  public static reset(): void {
+    EnvironmentConfig.instance = undefined as any;
+  }
+
   public static get isDevelopment(): boolean {
     return EnvironmentConfig.getInstance().NODE_ENV === 'development';
   }

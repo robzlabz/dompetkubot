@@ -45,7 +45,7 @@ export class AIRouterService {
     try {
       // Get conversation context
       const context = await this.openAIService.getConversationContext(userId);
-      
+
       // Store user message in conversation history
       await this.storeConversation(userId, message, 'user');
 
@@ -62,11 +62,11 @@ export class AIRouterService {
       // If AI wants to use a tool
       if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
         const toolCall = aiResponse.toolCalls[0]; // Use first tool call
-        
+
         try {
           // Parse tool parameters
           const parameters = JSON.parse(toolCall.function.arguments);
-          
+
           // Execute the tool
           const toolResult = await this.toolRegistry.executeTool(
             toolCall.function.name,
@@ -95,10 +95,10 @@ export class AIRouterService {
           };
         } catch (error) {
           console.error('Error executing tool:', error);
-          
+
           const errorResponse = 'Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi.';
           await this.storeConversation(userId, errorResponse, 'assistant');
-          
+
           return {
             response: errorResponse,
             requiresToolExecution: false,
@@ -144,11 +144,11 @@ export class AIRouterService {
       };
     } catch (error) {
       console.error('Error in AI routing:', error);
-      
+
       // Try to provide helpful fallback based on user input
       const fallbackResponse = this.getFallbackResponse(message);
       await this.storeConversation(userId, fallbackResponse, 'assistant');
-      
+
       return {
         response: fallbackResponse,
         requiresToolExecution: false,
@@ -173,29 +173,29 @@ export class AIRouterService {
     }
 
     const transactionId = nanoid(8);
-    
+
     switch (toolName) {
       case 'create_expense':
         return await this.formatExpenseResponse(toolResult, transactionId, originalMessage, context);
-      
+
       case 'create_income':
         return await this.formatIncomeResponse(toolResult, transactionId, originalMessage, context);
-      
+
       case 'set_budget':
         return await this.formatBudgetResponse(toolResult, transactionId);
-      
+
       case 'add_balance':
         return await this.formatBalanceResponse(toolResult, transactionId);
-      
+
       case 'redeem_voucher':
         return await this.formatVoucherResponse(toolResult, transactionId);
-      
+
       case 'edit_expense':
         return await this.formatEditExpenseResponse(toolResult, transactionId);
-      
+
       case 'manage_category':
         return await this.formatCategoryResponse(toolResult, transactionId);
-      
+
       default:
         return `✅ berhasil tercatat! \`${transactionId}\` ${toolResult.message}`;
     }
@@ -213,7 +213,7 @@ export class AIRouterService {
     const expense = toolResult.data;
     const amount = expense.amount;
     const description = expense.description;
-    
+
     // Generate personalized comment
     const comment = await this.openAIService.generatePersonalizedComment(
       'expense',
@@ -223,7 +223,7 @@ export class AIRouterService {
     );
 
     let response = `✅ berhasil tercatat! \`${transactionId}\``;
-    
+
     // Add calculation if present
     if (toolResult.metadata?.calculationExpression) {
       response += ` ${toolResult.metadata.calculationExpression} = Rp ${amount.toLocaleString('id-ID')}`;
@@ -257,7 +257,7 @@ export class AIRouterService {
     const income = toolResult.data;
     const amount = income.amount;
     const description = income.description;
-    
+
     // Generate personalized comment
     const comment = await this.openAIService.generatePersonalizedComment(
       'income',
@@ -322,7 +322,7 @@ export class AIRouterService {
   ): Promise<string> {
     const action = toolResult.metadata?.action || 'updated';
     const category = toolResult.data;
-    
+
     const actionText = {
       created: 'dibuat',
       updated: 'diperbarui',
@@ -387,5 +387,36 @@ export class AIRouterService {
 
     // Return random suggestions
     return suggestions.slice(0, 3);
+  }
+
+  /**
+   * Generate fallback response for unclear or failed input
+   */
+  private getFallbackResponse(message: string): string {
+    const input = message.toLowerCase();
+
+    // Provide contextual fallback based on detected intent
+    if (input.includes('beli') || input.includes('bayar') || input.includes('byr')) {
+      return `🤔 **Sepertinya Anda ingin mencatat pengeluaran...**\n\n💡 **Coba format ini:**\n• "beli kopi 25rb"\n• "bayar listrik 150000"\n• "belanja groceries 5kg ayam @ 12rb"\n\nKetik /help pengeluaran untuk panduan lengkap.`;
+    }
+
+    if (input.includes('gaji') || input.includes('bonus') || input.includes('dapat')) {
+      return `🤔 **Sepertinya Anda ingin mencatat pemasukan...**\n\n💡 **Coba format ini:**\n• "gaji bulan ini 5 juta"\n• "dapat bonus 500rb"\n• "freelance project 2 juta"\n\nKetik /help pemasukan untuk panduan lengkap.`;
+    }
+
+    if (input.includes('budget') || input.includes('anggaran')) {
+      return `🤔 **Sepertinya Anda ingin mengatur budget...**\n\n💡 **Coba format ini:**\n• "budget makanan 1 juta"\n• "budget transportasi 500rb"\n• "status budget" - untuk cek budget\n\nKetik /help budget untuk panduan lengkap.`;
+    }
+
+    if (input.includes('laporan') || input.includes('ringkasan')) {
+      return `🤔 **Sepertinya Anda ingin melihat laporan...**\n\n💡 **Coba format ini:**\n• "laporan bulan ini"\n• "ringkasan minggu ini"\n• "pengeluaran hari ini"\n\nKetik /help laporan untuk panduan lengkap.`;
+    }
+
+    if (input.includes('saldo') || input.includes('koin')) {
+      return `🤔 **Sepertinya Anda ingin mengecek atau menambah saldo...**\n\n💡 **Coba format ini:**\n• "saldo koin" - cek saldo\n• "tambah saldo 50rb" - top up\n• "berapa koin saya"\n\nKetik /help koin untuk panduan lengkap.`;
+    }
+
+    // General fallback
+    return `🤖 **Hmm, saya tidak mengerti...**\n\nBisa dijelaskan dengan cara lain?\n\n💡 **Contoh yang bisa saya pahami:**\n• "beli kopi 25rb" - catat pengeluaran\n• "gaji 5 juta" - catat pemasukan\n• "budget makanan 1 juta" - atur budget\n• "laporan bulan ini" - lihat ringkasan\n\nKetik /help untuk panduan lengkap.`;
   }
 }

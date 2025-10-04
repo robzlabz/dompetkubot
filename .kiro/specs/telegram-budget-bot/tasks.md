@@ -209,14 +209,14 @@
   - Test Indonesian formatting
   - _Requirements: 5.4, 9.1, 9.2, 9.3, 9.4_
 
-- [-] 11. Add help system and user guidance
+- [x] 11. Add help system and user guidance
 - [x] 11.1 Implement help commands and guidance
   - Create /start command with Indonesian welcome message
   - Add comprehensive help system in Bahasa Indonesia
   - Implement guided setup for new users
   - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [-] 11.2 Add error handling and user feedback
+- [x] 11.2 Add error handling and user feedback
   - Implement user-friendly error messages in Bahasa Indonesia
   - Add suggestions for unclear input
   - Create fallback responses for AI failures
@@ -228,14 +228,14 @@
   - Test guided setup flow
   - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 12. Set up external service integrations
-- [ ] 12.1 Integrate OCR service for receipt processing
+- [x] 12. Set up external service integrations
+- [x] 12.1 Integrate OCR service for receipt processing
   - Set up OCR service (Google Vision API or similar)
   - Implement receipt data extraction and parsing
   - Handle OCR errors and fallbacks
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 12.2 Integrate speech-to-text service
+- [x] 12.2 Integrate speech-to-text service
   - Set up STT service for voice message processing
   - Handle audio format conversion if needed
   - Implement STT error handling
@@ -247,8 +247,8 @@
   - Test error handling and fallbacks
   - _Requirements: 2.1, 3.1_
 
-- [ ] 13. Final integration and deployment preparation
-- [ ] 13.1 Integrate all components and test end-to-end workflows
+- [-] 13. Final integration and deployment preparation
+- [x] 13.1 Integrate all components and test end-to-end workflows
   - Connect all services and test complete user journeys
   - Test multi-modal input processing (text, voice, receipt)
   - Verify coin deduction and balance management
