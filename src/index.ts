@@ -20,6 +20,8 @@ import { UserService } from './services/UserService.js';
 import { CategoryService } from './services/CategoryService.js';
 import { EncryptionService } from './services/EncryptionService.js';
 import { PrivacyService } from './services/PrivacyService.js';
+import { HelpService } from './services/HelpService.js';
+import { ErrorHandlingService } from './services/ErrorHandlingService.js';
 import { PrismaClient } from '@prisma/client';
 
 let botService: TelegramBotService | null = null;
@@ -59,6 +61,8 @@ async function main() {
     const categoryService = new CategoryService(categoryRepo, openAIService);
     const userService = new UserService(userRepo, walletRepo, categoryService);
     const privacyService = new PrivacyService(userRepo, expenseRepo, incomeRepo, conversationRepo, walletRepo, encryptionService);
+    const helpService = new HelpService();
+    const errorHandler = new ErrorHandlingService();
 
     // Initialize bot service
     botService = new TelegramBotService(
@@ -69,7 +73,9 @@ async function main() {
       walletService,
       ocrService,
       expenseService,
-      userService
+      userService,
+      helpService,
+      errorHandler
     );
 
     // Start the bot

@@ -141,3 +141,81 @@ export interface IConversationService {
   completeConversation(conversationId: string): Promise<void>;
   cancelConversation(conversationId: string): Promise<void>;
 }
+
+export interface IReportingService {
+  generateMonthlySummary(userId: string, year: number, month: number): Promise<{
+    period: { startDate: Date; endDate: Date; type: 'MONTHLY' };
+    totalExpenses: number;
+    totalIncome: number;
+    netAmount: number;
+    expensesByCategory: Array<{
+      categoryId: string;
+      categoryName: string;
+      totalAmount: number;
+      count: number;
+      percentage: number;
+      averageAmount: number;
+    }>;
+    incomesByCategory: Array<{
+      categoryId: string;
+      categoryName: string;
+      totalAmount: number;
+      count: number;
+      percentage: number;
+      averageAmount: number;
+    }>;
+    itemizedBreakdown?: Array<{
+      expenseId: string;
+      description: string;
+      totalAmount: number;
+      items: Array<{
+        name: string;
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+      }>;
+      date: Date;
+    }>;
+    topExpenses: Array<{
+      id: string;
+      description: string;
+      amount: number;
+      categoryName: string;
+      date: Date;
+      hasItems: boolean;
+    }>;
+    expenseCount: number;
+    incomeCount: number;
+    averageExpense: number;
+    averageIncome: number;
+  }>;
+  generateWeeklySummary(userId: string, weekStartDate: Date): Promise<any>;
+  generateYearlySummary(userId: string, year: number): Promise<any>;
+  generateMonthlyReport(userId: string, year: number, month: number): Promise<any>;
+  generateWeeklyReport(userId: string, weekStartDate: Date): Promise<any>;
+  getBudgetStatusReport(userId: string): Promise<Array<{
+    categoryId: string;
+    categoryName: string;
+    budgetAmount: number;
+    spentAmount: number;
+    remainingAmount: number;
+    percentage: number;
+    status: 'UNDER_BUDGET' | 'WARNING' | 'OVER_BUDGET';
+    alertMessage: string;
+  }>>;
+  getSpendingTrends(userId: string, months?: number): Promise<Array<{
+    month: number;
+    year: number;
+    totalExpenses: number;
+    totalIncome: number;
+    netAmount: number;
+    topCategory: string;
+  }>>;
+  getCategoryComparison(userId: string, categoryId: string, months?: number): Promise<Array<{
+    month: number;
+    year: number;
+    amount: number;
+    transactionCount: number;
+    averageAmount: number;
+  }>>;
+}

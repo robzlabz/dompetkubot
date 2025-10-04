@@ -8,6 +8,9 @@ import {
   AddBalanceTool,
   RedeemVoucherTool,
   CategoryManagementTool,
+  GenerateReportTool,
+  BudgetStatusTool,
+  HelpTool,
 } from './tools/index.js';
 
 // Service interfaces (these will be implemented in other tasks)
@@ -18,6 +21,7 @@ import {
   IBudgetService,
   IWalletService,
   IVoucherService,
+  IReportingService,
 } from '../../interfaces/services.js';
 
 export interface ToolFactoryDependencies {
@@ -27,7 +31,9 @@ export interface ToolFactoryDependencies {
   budgetService: IBudgetService;
   walletService: IWalletService;
   voucherService: IVoucherService;
+  reportingService: IReportingService;
   openAIService: OpenAIService;
+  helpService?: any; // HelpService - optional for backward compatibility
 }
 
 export class ToolFactory {
@@ -45,7 +51,9 @@ export class ToolFactory {
       budgetService,
       walletService,
       voucherService,
+      reportingService,
       openAIService,
+      helpService,
     } = dependencies;
 
     // Register expense-related tools
@@ -81,6 +89,22 @@ export class ToolFactory {
     toolRegistry.registerTool(
       new CategoryManagementTool(categoryService)
     );
+
+    // Register reporting tools
+    toolRegistry.registerTool(
+      new GenerateReportTool(reportingService)
+    );
+
+    toolRegistry.registerTool(
+      new BudgetStatusTool(reportingService, categoryService)
+    );
+
+    // Register help tool if helpService is available
+    if (helpService) {
+      toolRegistry.registerTool(
+        new HelpTool(helpService)
+      );
+    }
   }
 
   /**
@@ -95,6 +119,9 @@ export class ToolFactory {
       'add_balance',
       'redeem_voucher',
       'manage_category',
+      'generate_report',
+      'check_budget_status',
+      'help_tool',
     ];
   }
 
@@ -110,6 +137,9 @@ export class ToolFactory {
       add_balance: 'Add balance to user wallet',
       redeem_voucher: 'Redeem a voucher code for rewards',
       manage_category: 'Create, update, delete, or list categories',
+      generate_report: 'Generate spending and income reports and summaries',
+      check_budget_status: 'Check budget status and spending progress',
+      help_tool: 'Provide help and guidance when user input is unclear or user needs assistance',
     };
   }
 }

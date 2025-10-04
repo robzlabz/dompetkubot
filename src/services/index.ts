@@ -14,6 +14,9 @@ export { OCRService } from './OCRService.js';
 export { UserService } from './UserService.js';
 export { EncryptionService } from './EncryptionService.js';
 export { PrivacyService } from './PrivacyService.js';
+export { ReportingService } from './ReportingService.js';
+export { HelpService } from './HelpService.js';
+export { ErrorHandlingService } from './ErrorHandlingService.js';
 
 // Export AI services and tools
 export * from './ai/index.js';

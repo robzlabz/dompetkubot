@@ -6,3 +6,6 @@ export { SetBudgetTool } from './SetBudgetTool.js';
 export { AddBalanceTool } from './AddBalanceTool.js';
 export { RedeemVoucherTool } from './RedeemVoucherTool.js';
 export { CategoryManagementTool } from './CategoryManagementTool.js';
+export { GenerateReportTool } from './GenerateReportTool.js';
+export { BudgetStatusTool } from './BudgetStatusTool.js';
+export { HelpTool } from './HelpTool.js';

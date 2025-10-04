@@ -20,6 +20,7 @@ export interface ToolResult {
     coinsUsed?: number;
     transactionId?: string;
     calculationExpression?: string;
+    [key: string]: any; // Allow additional metadata fields
   };
 }
 

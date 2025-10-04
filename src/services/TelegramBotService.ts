@@ -8,6 +8,8 @@ import { WalletService } from './WalletService.js';
 import { OCRService } from './OCRService.js';
 import { ExpenseService } from './ExpenseService.js';
 import { UserService } from './UserService.js';
+import { HelpService } from './HelpService.js';
+import { ErrorHandlingService, ErrorType } from './ErrorHandlingService.js';
 
 export interface BotContext {
     userId: string;
@@ -34,6 +36,8 @@ export class TelegramBotService implements MessageHandler {
     private ocrService: OCRService;
     private expenseService: ExpenseService;
     private userService: UserService;
+    private helpService: HelpService;
+    private errorHandler: ErrorHandlingService;
 
     constructor(
         conversationRepo: ConversationRepository,
@@ -43,7 +47,9 @@ export class TelegramBotService implements MessageHandler {
         walletService: WalletService,
         ocrService: OCRService,
         expenseService: ExpenseService,
-        userService: UserService
+        userService: UserService,
+        helpService: HelpService,
+        errorHandler: ErrorHandlingService
     ) {
         this.conversationRepo = conversationRepo;
         this.aiRouter = aiRouter;
@@ -53,6 +59,8 @@ export class TelegramBotService implements MessageHandler {
         this.ocrService = ocrService;
         this.expenseService = expenseService;
         this.userService = userService;
+        this.helpService = helpService;
+        this.errorHandler = errorHandler;
 
         this.bot = new Bot({
             token: env.TELEGRAM_BOT_TOKEN,
@@ -82,14 +90,28 @@ export class TelegramBotService implements MessageHandler {
             } catch (error) {
                 console.error('Bot error:', error);
 
-                const errorMessage = env.NODE_ENV === 'development'
-                    ? `Terjadi kesalahan: ${error instanceof Error ? error.message : 'Unknown error'}`
-                    : 'Maaf, terjadi kesalahan. Silakan coba lagi nanti.';
+                const userContext = (ctx as any).userContext as BotContext & { telegramId: string };
+                
+                // Create structured error
+                const appError = this.errorHandler.createError(
+                    ErrorType.UNKNOWN_ERROR,
+                    error instanceof Error ? error.message : 'Unknown error',
+                    { errorId: Date.now().toString() },
+                    error instanceof Error ? error : undefined,
+                    userContext?.userId
+                );
+
+                // Log the error
+                this.errorHandler.logError(appError);
+
+                // Format user-friendly response
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
 
                 if (ctx.update?.message) {
                     await this.bot.api.sendMessage({
                         chat_id: ctx.update.message.chat.id,
-                        text: errorMessage
+                        text: errorResponse.userMessage,
+                        parse_mode: 'Markdown'
                     });
                 }
             }
@@ -151,57 +173,16 @@ export class TelegramBotService implements MessageHandler {
         // Start command handler
         this.bot.command('start', async (ctx) => {
             const userContext = (ctx as any).userContext as BotContext & { isNewUser: boolean };
-            const firstName = userContext.firstName || 'Teman';
             
-            let welcomeMessage: string;
-            
-            if (userContext.isNewUser) {
-                welcomeMessage = `🎉 Halo ${firstName}, selamat datang di Budget Bot!
-
-Saya adalah asisten keuangan pribadi yang akan membantu Anda mengelola pengeluaran dan pemasukan dengan mudah menggunakan bahasa Indonesia.
-
-🎁 **Bonus untuk pengguna baru:**
-• 5 koin gratis untuk mencoba fitur premium!
-• Akun Anda sudah siap digunakan
-
-✨ **Fitur utama:**
-• 💬 Chat natural dalam Bahasa Indonesia
-• 🎤 Pesan suara (premium - 0.5 koin)
-• 📸 Scan struk belanja (premium - 1 koin)
-• 📊 Laporan keuangan otomatis
-• 🎯 Pengaturan budget dan alert
-• 🏷️ Kategorisasi otomatis dengan AI
-
-🚀 **Mulai sekarang dengan mengetik pengeluaran Anda:**
-"beli kopi 25rb"
-"bayar listrik 150000"
-"gaji bulan ini 5 juta"
-
-Ketik /help untuk panduan lengkap!`;
-            } else {
-                welcomeMessage = `👋 Selamat datang kembali, ${firstName}!
-
-Saya siap membantu Anda mengelola keuangan hari ini.
-
-✨ **Fitur yang tersedia:**
-• 💬 Chat natural dalam Bahasa Indonesia
-• 🎤 Pesan suara (premium - 0.5 koin)
-• 📸 Scan struk belanja (premium - 1 koin)
-• 📊 Laporan keuangan otomatis
-• 🎯 Pengaturan budget dan alert
-• 🏷️ Kategorisasi otomatis dengan AI
-
-🚀 **Mulai dengan mengetik transaksi Anda atau:**
-• "laporan bulan ini" - lihat ringkasan keuangan
-• "saldo koin" - cek saldo koin Anda
-• "status budget" - cek status budget
-
-Ketik /help untuk panduan lengkap!`;
-            }
+            const welcomeMessage = this.helpService.generateWelcomeMessage({
+                firstName: userContext.firstName,
+                isNewUser: userContext.isNewUser
+            });
 
             await this.bot.api.sendMessage({
                 chat_id: ctx.update!.message!.chat.id,
-                text: welcomeMessage
+                text: welcomeMessage,
+                parse_mode: 'Markdown'
             });
         });
 
@@ -308,45 +289,49 @@ Proses ini mungkin memakan waktu beberapa menit.`;
 
         // Help command handler
         this.bot.command('help', async (ctx) => {
-            const helpMessage = `📖 Panduan Budget Bot
+            const message = ctx.update?.message;
+            if (!message?.text) return;
 
-💬 **Cara mencatat pengeluaran:**
-• "beli kopi 25rb"
-• "bayar listrik 150000"
-• "belanja groceries 5kg ayam @ 12rb"
+            // Extract topic from command (e.g., "/help pengeluaran")
+            const parts = message.text.split(' ');
+            const topic = parts.length > 1 ? parts[1] : undefined;
 
-💰 **Cara mencatat pemasukan:**
-• "gaji bulan ini 5 juta"
-• "dapat bonus 500rb"
+            const helpContent = this.helpService.getHelpContent(topic);
 
-🎯 **Mengatur budget:**
-• "budget makanan 1 juta"
-• "budget transportasi 500rb"
+            let helpMessage = `**${helpContent.title}**\n\n${helpContent.content}`;
 
-🏷️ **Mengelola kategori:**
-• "buat kategori investasi"
-• "hapus kategori hiburan"
+            // Add examples if available
+            if (helpContent.examples && helpContent.examples.length > 0) {
+                helpMessage += `\n\n**Contoh:**\n${helpContent.examples.map(ex => `• ${ex}`).join('\n')}`;
+            }
 
-💳 **Menambah saldo koin:**
-• "tambah saldo 50rb"
-
-🎫 **Redeem voucher:**
-• "pakai voucher ABC123"
-
-📊 **Melihat laporan:**
-• "laporan bulan ini"
-• "status budget"
-
-🎤 **Fitur premium:**
-• Kirim pesan suara untuk input cepat
-• Foto struk untuk input otomatis
-
-Butuh bantuan? Tanya saja dalam bahasa Indonesia!`;
+            // Add available topics if showing main help
+            if (!topic || topic === 'main') {
+                const topics = this.helpService.getAvailableTopics();
+                helpMessage += `\n\n**Topik bantuan lainnya:**\n${topics.map(t => `• /help ${t}`).join('\n')}`;
+            }
 
             await this.bot.api.sendMessage({
-                chat_id: ctx.update!.message!.chat.id,
-                text: helpMessage
+                chat_id: message.chat.id,
+                text: helpMessage,
+                parse_mode: 'Markdown'
             });
+        });
+
+        // Setup command handler for guided setup
+        this.bot.command('setup', async (ctx) => {
+            const userContext = (ctx as any).userContext as BotContext;
+            
+            // Start guided setup from step 1
+            const setupStep = this.helpService.getGuidedSetupStep(1);
+            if (setupStep) {
+                // Store setup state in user context (in a real app, you'd store this in database)
+                await this.bot.api.sendMessage({
+                    chat_id: ctx.update!.message!.chat.id,
+                    text: setupStep.prompt,
+                    parse_mode: 'Markdown'
+                });
+            }
         });
 
         // Text message handler
@@ -406,6 +391,12 @@ Butuh bantuan? Tanya saja dalam bahasa Indonesia!`;
                 return await this.handleConversationDeletion(userContext);
             }
 
+            // Handle guided setup responses
+            if (text.toLowerCase() === 'setup') {
+                const setupStep = this.helpService.getGuidedSetupStep(1);
+                return setupStep ? setupStep.prompt : 'Setup tidak tersedia saat ini.';
+            }
+
             // Store conversation (initially with empty response)
             const conversation = await this.conversationRepo.create({
                 userId: context.userId,
@@ -417,19 +408,60 @@ Butuh bantuan? Tanya saja dalam bahasa Indonesia!`;
             // Get conversation context for AI
             const recentConversations = await this.conversationRepo.findRecentByUserId(context.userId, 5);
 
-            // Route through AI system
-            const result = await this.aiRouter.routeMessage(text, context.userId);
+            try {
+                // Route through AI system
+                const result = await this.aiRouter.routeMessage(text, context.userId);
 
-            // Update conversation with response
-            await this.conversationRepo.update(conversation.id, {
-                response: result.response,
-                toolUsed: result.toolCall?.function?.name,
-            });
+                // Update conversation with response
+                await this.conversationRepo.update(conversation.id, {
+                    response: result.response,
+                    toolUsed: result.toolCall?.function?.name,
+                });
 
-            return result.response;
+                return result.response;
+            } catch (aiError) {
+                console.error('AI routing error:', aiError);
+
+                // Create structured error for AI failure
+                const appError = this.errorHandler.createError(
+                    ErrorType.AI_SERVICE_ERROR,
+                    'AI service temporarily unavailable',
+                    { originalMessage: text },
+                    aiError instanceof Error ? aiError : undefined,
+                    context.userId,
+                    { intent: 'text_processing' }
+                );
+
+                this.errorHandler.logError(appError);
+
+                // Try to provide helpful fallback response
+                const fallbackResponse = this.errorHandler.getFallbackResponse(text);
+                
+                // Update conversation with fallback response
+                await this.conversationRepo.update(conversation.id, {
+                    response: fallbackResponse,
+                    toolUsed: 'fallback_handler',
+                });
+
+                return fallbackResponse;
+            }
         } catch (error) {
             console.error('Error handling text message:', error);
-            return 'Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.';
+
+            // Create structured error
+            const appError = this.errorHandler.createError(
+                ErrorType.UNKNOWN_ERROR,
+                'Failed to process text message',
+                { originalMessage: text },
+                error instanceof Error ? error : undefined,
+                context.userId
+            );
+
+            this.errorHandler.logError(appError);
+
+            // Return user-friendly error message
+            const errorResponse = this.errorHandler.formatErrorResponse(appError);
+            return errorResponse.userMessage;
         }
     }
 
@@ -479,7 +511,17 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
             const requiredCoins = 0.5; // Base cost for voice processing
 
             if (!await this.walletService.checkSufficientBalance(context.userId, requiredCoins)) {
-                return `❌ Saldo koin tidak cukup untuk memproses pesan suara.\n\nDibutuhkan: ${requiredCoins} koin\nSaldo Anda: ${wallet.coins} koin\n\nKetik "tambah saldo" untuk menambah koin.`;
+                const appError = this.errorHandler.createError(
+                    ErrorType.INSUFFICIENT_BALANCE,
+                    'Insufficient coins for voice processing',
+                    { required: requiredCoins, current: wallet.coins },
+                    undefined,
+                    context.userId,
+                    { feature: 'voice_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                return errorResponse.userMessage;
             }
 
             // Download voice file from Telegram
@@ -509,7 +551,17 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
             // Validate audio file
             const validation = this.sttService.validateAudioFile(audioFile);
             if (!validation.valid) {
-                return `❌ ${validation.error}`;
+                const appError = this.errorHandler.createError(
+                    ErrorType.STT_PROCESSING_ERROR,
+                    'Invalid audio file format',
+                    { validationError: validation.error },
+                    undefined,
+                    context.userId,
+                    { feature: 'voice_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                return errorResponse.userMessage;
             }
 
             // Deduct coins before processing
@@ -531,11 +583,22 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
                 // Refund coins if transcription failed
                 await this.walletService.addBalance(context.userId, requiredCoins * 1000); // Convert coins back to balance
 
+                const appError = this.errorHandler.createError(
+                    ErrorType.STT_PROCESSING_ERROR,
+                    'Speech-to-text processing failed',
+                    { sttError: transcriptionResult.error },
+                    undefined,
+                    context.userId,
+                    { feature: 'voice_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                
                 await this.conversationRepo.update(conversation.id, {
-                    response: `❌ Gagal memproses pesan suara: ${transcriptionResult.error}`,
+                    response: errorResponse.userMessage,
                 });
 
-                return `❌ Gagal memproses pesan suara: ${transcriptionResult.error}\n\nKoin telah dikembalikan.`;
+                return errorResponse.userMessage;
             }
 
             const transcribedText = transcriptionResult.text!;
@@ -571,7 +634,17 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
             const requiredCoins = this.ocrService.getOCRCost(); // 1.0 coins
 
             if (!await this.walletService.checkSufficientBalance(context.userId, requiredCoins)) {
-                return `❌ Saldo koin tidak cukup untuk memproses foto struk.\n\nDibutuhkan: ${requiredCoins} koin\nSaldo Anda: ${wallet.coins} koin\n\nKetik "tambah saldo" untuk menambah koin.`;
+                const appError = this.errorHandler.createError(
+                    ErrorType.INSUFFICIENT_BALANCE,
+                    'Insufficient coins for OCR processing',
+                    { required: requiredCoins, current: wallet.coins },
+                    undefined,
+                    context.userId,
+                    { feature: 'ocr_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                return errorResponse.userMessage;
             }
 
             // Download photo file from Telegram
@@ -601,7 +674,17 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
             // Validate image file
             const validation = this.ocrService.validateImageFile(imageFile);
             if (!validation.valid) {
-                return `❌ ${validation.error}`;
+                const appError = this.errorHandler.createError(
+                    ErrorType.OCR_PROCESSING_ERROR,
+                    'Invalid image file format',
+                    { validationError: validation.error },
+                    undefined,
+                    context.userId,
+                    { feature: 'ocr_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                return errorResponse.userMessage;
             }
 
             // Deduct coins before processing
@@ -623,11 +706,22 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
                 // Refund coins if OCR failed
                 await this.walletService.addBalance(context.userId, requiredCoins * 1000); // Convert coins back to balance
 
+                const appError = this.errorHandler.createError(
+                    ErrorType.OCR_PROCESSING_ERROR,
+                    'OCR processing failed',
+                    { ocrError: ocrResult.error },
+                    undefined,
+                    context.userId,
+                    { feature: 'ocr_processing' }
+                );
+
+                const errorResponse = this.errorHandler.formatErrorResponse(appError);
+                
                 await this.conversationRepo.update(conversation.id, {
-                    response: `❌ Gagal memproses foto struk: ${ocrResult.error}`,
+                    response: errorResponse.userMessage,
                 });
 
-                return `❌ Gagal memproses foto struk: ${ocrResult.error}\n\nKoin telah dikembalikan.`;
+                return errorResponse.userMessage;
             }
 
             const receiptData = ocrResult.receiptData!;

@@ -106,26 +106,55 @@ export class AIRouterService {
         }
       }
 
-      // No tool needed, return AI response
-      const response = aiResponse.content || 'Maaf, saya tidak mengerti. Bisa dijelaskan lagi?';
+      // No tool needed - check if we should provide help
+      if (!aiResponse.content || aiResponse.content.length < 10) {
+        // AI response is too short or empty, try help tool
+        try {
+          const helpResult = await this.toolRegistry.executeTool(
+            'help_tool',
+            { query: message },
+            userId
+          );
+
+          if (helpResult.success && helpResult.message) {
+            await this.storeConversation(userId, helpResult.message, 'assistant');
+            return {
+              response: helpResult.message,
+              requiresToolExecution: false,
+              metadata: {
+                confidence: 0.6, // Medium confidence for help responses
+              },
+            };
+          }
+        } catch (helpError) {
+          console.error('Error using help tool:', helpError);
+        }
+      }
+
+      // Return AI response or fallback
+      const response = aiResponse.content || this.getFallbackResponse(message);
       await this.storeConversation(userId, response, 'assistant');
 
       return {
         response,
         requiresToolExecution: false,
         metadata: {
-          confidence: 0.7, // Lower confidence for general responses
+          confidence: aiResponse.content ? 0.7 : 0.4, // Lower confidence for fallback
         },
       };
     } catch (error) {
       console.error('Error in AI routing:', error);
       
-      const fallbackResponse = 'Maaf, sistem sedang mengalami gangguan. Silakan coba lagi nanti.';
+      // Try to provide helpful fallback based on user input
+      const fallbackResponse = this.getFallbackResponse(message);
       await this.storeConversation(userId, fallbackResponse, 'assistant');
       
       return {
         response: fallbackResponse,
         requiresToolExecution: false,
+        metadata: {
+          confidence: 0.3, // Low confidence for error fallbacks
+        },
       };
     }
   }
