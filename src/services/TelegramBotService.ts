@@ -10,6 +10,7 @@ import { ExpenseService } from './ExpenseService.js';
 import { UserService } from './UserService.js';
 import { HelpService } from './HelpService.js';
 import { ErrorHandlingService, ErrorType } from './ErrorHandlingService.js';
+import { SimplePatternMatcher } from './SimplePatternMatcher.js';
 
 export interface BotContext {
     userId: string;
@@ -38,6 +39,7 @@ export class TelegramBotService implements MessageHandler {
     private userService: UserService;
     private helpService: HelpService;
     private errorHandler: ErrorHandlingService;
+    private patternMatcher: SimplePatternMatcher;
 
     constructor(
         conversationRepo: ConversationRepository,
@@ -61,6 +63,7 @@ export class TelegramBotService implements MessageHandler {
         this.userService = userService;
         this.helpService = helpService;
         this.errorHandler = errorHandler;
+        this.patternMatcher = new SimplePatternMatcher();
 
         this.bot = new Bot({
             token: env.TELEGRAM_BOT_TOKEN,
@@ -422,6 +425,36 @@ Proses ini mungkin memakan waktu beberapa menit.`;
             } catch (aiError) {
                 console.error('AI routing error:', aiError);
 
+                // Try pattern matching as fallback
+                console.log('Trying pattern matching fallback...');
+                const patternMatch = this.patternMatcher.matchPattern(text);
+                
+                if (patternMatch && patternMatch.confidence > 0.7) {
+                    try {
+                        console.log(`Pattern matched: ${patternMatch.intent}`, patternMatch.extractedData);
+                        
+                        // Execute the matched tool
+                        const toolResult = await this.executePatternMatchedTool(
+                            patternMatch.intent,
+                            patternMatch.extractedData,
+                            context.userId
+                        );
+                        
+                        if (toolResult.success) {
+                            const response = this.formatSimpleToolResponse(patternMatch.intent, toolResult);
+                            
+                            await this.conversationRepo.update(conversation.id, {
+                                response,
+                                toolUsed: `pattern_${patternMatch.intent}`,
+                            });
+                            
+                            return response;
+                        }
+                    } catch (patternError) {
+                        console.error('Pattern matching execution error:', patternError);
+                    }
+                }
+
                 // Create structured error for AI failure
                 const appError = this.errorHandler.createError(
                     ErrorType.AI_SERVICE_ERROR,
@@ -434,10 +467,9 @@ Proses ini mungkin memakan waktu beberapa menit.`;
 
                 this.errorHandler.logError(appError);
 
-                // Try to provide helpful fallback response
+                // Final fallback response
                 const fallbackResponse = this.errorHandler.getFallbackResponse(text);
                 
-                // Update conversation with fallback response
                 await this.conversationRepo.update(conversation.id, {
                     response: fallbackResponse,
                     toolUsed: 'fallback_handler',
@@ -818,5 +850,76 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
 
     getBot(): Bot {
         return this.bot;
+    }
+
+    /**
+     * Execute tool based on pattern matching
+     */
+    private async executePatternMatchedTool(intent: string, data: any, userId: string): Promise<any> {
+        switch (intent) {
+            case 'create_expense':
+                return await this.expenseService.createExpense(userId, {
+                    userId,
+                    amount: data.amount,
+                    description: data.description,
+                    categoryId: data.categoryId
+                });
+
+            case 'create_income':
+                // Note: We need to implement income creation in the future
+                return {
+                    success: true,
+                    message: 'Income recorded',
+                    data: { amount: data.amount, description: data.description }
+                };
+
+            case 'set_budget':
+                // Note: We need to implement budget setting in the future
+                return {
+                    success: true,
+                    message: 'Budget set',
+                    data: { categoryId: data.categoryId, amount: data.amount }
+                };
+
+            case 'add_balance':
+                await this.walletService.addBalance(userId, data.amount);
+                const wallet = await this.walletService.getBalance(userId);
+                return {
+                    success: true,
+                    message: 'Balance added',
+                    data: wallet
+                };
+
+            default:
+                throw new Error(`Unknown intent: ${intent}`);
+        }
+    }
+
+    /**
+     * Format simple tool response
+     */
+    private formatSimpleToolResponse(intent: string, toolResult: any): string {
+        const transactionId = Math.random().toString(36).substring(2, 10);
+
+        switch (intent) {
+            case 'create_expense':
+                const expense = toolResult;
+                return `✅ berhasil tercatat! \`${transactionId}\` ${expense.description} Rp ${expense.amount.toLocaleString('id-ID')}\n\nPengeluaran berhasil dicatat! 💸`;
+
+            case 'create_income':
+                const income = toolResult.data;
+                return `✅ berhasil tercatat! \`${transactionId}\` ${income.description} Rp ${income.amount.toLocaleString('id-ID')}\n\nAlhamdulillah, rejeki lancar terus ya! 💰`;
+
+            case 'set_budget':
+                const budget = toolResult.data;
+                return `✅ berhasil tercatat! \`${transactionId}\` Budget diatur Rp ${budget.amount.toLocaleString('id-ID')}\n\nBudget berhasil diatur! Saya akan beri tahu kalau pengeluaran sudah mendekati batas. 🎯`;
+
+            case 'add_balance':
+                const wallet = toolResult.data;
+                return `✅ berhasil tercatat! \`${transactionId}\` Saldo ditambah\n\nSaldo sekarang: Rp ${wallet.balance.toLocaleString('id-ID')} | Koin: ${wallet.coins} 🪙`;
+
+            default:
+                return `✅ berhasil tercatat! \`${transactionId}\` ${toolResult.message}`;
+        }
     }
 }

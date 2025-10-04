@@ -29,15 +29,19 @@ let prisma: PrismaClient | null = null;
 
 async function main() {
   try {
-    console.log('Starting Telegram Budget Bot...');
+    console.log('Starting Telegram Budget Bot... ');
 
-    // Connect to database
-    await DatabaseConfig.connect();
-    console.log('Database connected successfully');
-
-    // Initialize Prisma client
+    // Initialize Prisma client with timeout
+    console.log('Connecting to database...');
     prisma = new PrismaClient();
-    await prisma.$connect();
+    
+    const connectPromise = prisma.$connect();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database connection timeout')), 10000)
+    );
+    
+    await Promise.race([connectPromise, timeoutPromise]);
+    console.log('Database connected successfully');
 
     // Initialize repositories
     const conversationRepo = new ConversationRepository(prisma);
@@ -50,7 +54,6 @@ async function main() {
     // Initialize services
     const openAIService = new OpenAIService(conversationRepo);
     const toolRegistry = new ToolRegistry();
-    const aiRouter = new AIRouterService(openAIService, toolRegistry, conversationRepo);
     const responseFormatter = new ResponseFormatterService(openAIService);
     const sttService = new SpeechToTextService();
     const ocrService = new OCRService();
@@ -63,6 +66,45 @@ async function main() {
     const privacyService = new PrivacyService(userRepo, expenseRepo, incomeRepo, conversationRepo, walletRepo, encryptionService);
     const helpService = new HelpService();
     const errorHandler = new ErrorHandlingService();
+
+    // Initialize AI tools manually (only the ones that work)
+    console.log('Initializing AI tools...');
+    
+    try {
+      // Import and register working tools
+      const { CreateExpenseTool } = await import('./services/ai/tools/CreateExpenseTool.js');
+      const { AddBalanceTool } = await import('./services/ai/tools/AddBalanceTool.js');
+      const { HelpTool } = await import('./services/ai/tools/HelpTool.js');
+      
+      // Register expense tool
+      const expenseTool = new CreateExpenseTool(
+        expenseService as any,
+        categoryService as any,
+        openAIService
+      );
+      toolRegistry.registerTool(expenseTool);
+      
+      // Register balance tool
+      const balanceTool = new AddBalanceTool(walletService as any);
+      toolRegistry.registerTool(balanceTool);
+      
+      // Register help tool
+      const helpTool = new HelpTool(helpService);
+      toolRegistry.registerTool(helpTool);
+      
+      console.log(`AI tools initialized: ${toolRegistry.getAllTools().length} tools`);
+      
+      // Test that tools work
+      const openAITools = toolRegistry.getOpenAITools();
+      console.log(`OpenAI tools ready: ${openAITools.length}`);
+      
+    } catch (toolError) {
+      console.error('AI tools initialization failed:', toolError);
+      console.log('Continuing without AI tools...');
+    }
+
+    // Initialize AI router after tools are registered
+    const aiRouter = new AIRouterService(openAIService, toolRegistry, conversationRepo);
 
     // Initialize bot service
     botService = new TelegramBotService(

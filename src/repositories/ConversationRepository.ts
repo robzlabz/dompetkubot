@@ -58,7 +58,13 @@ export class ConversationRepository extends BaseRepository<IConversation, Omit<I
 
   async create(conversationData: Omit<IConversation, 'id' | 'createdAt'>): Promise<IConversation> {
     try {
-      this.validateRequiredFields(conversationData, ['userId', 'message', 'response', 'messageType']);
+      // Validate required fields (response can be empty string initially)
+      this.validateRequiredFields(conversationData, ['userId', 'message', 'messageType']);
+      
+      // Validate response exists (but can be empty)
+      if (conversationData.response === undefined || conversationData.response === null) {
+        throw new Error('Response field is required (can be empty string)');
+      }
 
       const conversation = await this.prisma.conversation.create({
         data: {
