@@ -28,7 +28,6 @@ async function safeEditMarkdown(ctx: any, text: string, messageId: number) {
     }
   }
 }
-import { format } from "path";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -263,6 +262,9 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
     // Chat logging: log incoming chat
     logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
+
+    // add time to text
+    text = `${new Date().toLocaleString()} ${text}`;
 
 
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
