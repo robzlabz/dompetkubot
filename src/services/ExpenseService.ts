@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { nanoid } from "nanoid";
 import { toNumber } from "../utils/money";
-import type { Prisma, User, Expense, ExpenseItem, Category } from "@prisma/client";
+import type { Prisma, User, Expense, ExpenseItem, Category } from "../../prisma/src/generated";
 
 // Define explicit argument and return types to avoid any
 type ExpenseItemArg = {

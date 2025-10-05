@@ -1,11 +1,11 @@
 import { prisma } from "./prisma";
 import { nanoid } from "nanoid";
 import { toNumber } from "../utils/money";
-import type { Prisma, User, Income, Category } from "@prisma/client";
+import type { Prisma, User, Income, Category } from "../../prisma/src/generated";
 
 type CreateIncomeArgs = {
   telegramId: string;
-  categoryId?: string | null;
+  categoryId?: number | null;
   categoryName?: string | null;
   amount?: number | string | null;
   description?: string | null;
@@ -21,7 +21,7 @@ type UpdateIncomeArgs = {
   incomeId: string;
   description?: string | null;
   amount?: number | string | null;
-  categoryId?: string | null;
+  categoryId?: number | null;
   categoryName?: string | null;
 };
 
@@ -38,7 +38,7 @@ async function getOrCreateUserByTelegramId(telegramId: string): Promise<User> {
   return prisma.user.create({ data: { telegramId, language: "id" } });
 }
 
-async function resolveIncomeCategory({ userId, categoryId, categoryName }: { userId: string; categoryId?: string | null; categoryName?: string | null; }): Promise<Category> {
+async function resolveIncomeCategory({ userId, categoryId, categoryName }: { userId: number; categoryId?: number | null; categoryName?: string | null; }): Promise<Category> {
   if (categoryId) {
     const cat = await prisma.category.findUnique({ where: { id: categoryId } });
     if (cat) return cat;
