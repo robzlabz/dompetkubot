@@ -46,7 +46,6 @@ export async function coversationByUser(args: CoversationByUserArgs): Promise<Co
 
 export type UpdateConversationArgs = {
   id: number;
-  userId: number;
   message?: string | null;
   role?: MessageRole | null;
   messageType?: MessageType | null;
