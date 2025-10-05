@@ -5,7 +5,7 @@ export interface SpendingSummary {
   period: {
     startDate: Date;
     endDate: Date;
-    type: 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+    type: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   };
   totalExpenses: number;
   totalIncome: number;
@@ -108,6 +108,19 @@ export class ReportingService {
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
     return this.generateSpendingSummary(userId, startDate, endDate, 'MONTHLY');
+  }
+
+  /**
+   * Generate daily spending summary
+   */
+  async generateDailySummary(userId: string, date: Date): Promise<SpendingSummary> {
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
+
+    return this.generateSpendingSummary(userId, startDate, endDate, 'DAILY');
   }
 
   /**
@@ -276,7 +289,7 @@ export class ReportingService {
     userId: string, 
     startDate: Date, 
     endDate: Date, 
-    type: 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+    type: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
   ): Promise<SpendingSummary> {
     // Get all expenses and incomes for the period
     const expenses = await this.expenseRepository.findByUserIdAndDateRange(userId, startDate, endDate);

@@ -3,10 +3,11 @@ import { BaseTool, ToolResult } from '../ToolRegistry.js';
 import { IReportingService } from '../../../interfaces/services.js';
 
 const GenerateReportSchema = z.object({
-  reportType: z.enum(['MONTHLY', 'WEEKLY', 'YEARLY']).describe('Type of report to generate'),
+  reportType: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).describe('Type of report to generate'),
   year: z.number().int().min(2020).max(2030).optional().describe('Year for the report (required for monthly/yearly reports)'),
   month: z.number().int().min(1).max(12).optional().describe('Month for monthly report (1-12)'),
   weekStartDate: z.string().optional().describe('Start date for weekly report in YYYY-MM-DD format'),
+  date: z.string().optional().describe('Specific date for daily report in YYYY-MM-DD format'),
 });
 
 export class GenerateReportTool extends BaseTool {
@@ -24,6 +25,17 @@ export class GenerateReportTool extends BaseTool {
       let reportTitle: string;
 
       switch (params.reportType) {
+        case 'DAILY': {
+          let targetDate: Date;
+          if (params.date) {
+            targetDate = new Date(params.date);
+          } else {
+            targetDate = new Date();
+          }
+          report = await this.reportingService.generateDailySummary(userId, targetDate);
+          reportTitle = `Ringkasan Harian ${targetDate.toLocaleDateString('id-ID')}`;
+          break;
+        }
         case 'MONTHLY':
           if (!params.year || !params.month) {
             const now = new Date();
@@ -90,7 +102,20 @@ export class GenerateReportTool extends BaseTool {
   private formatReportForUser(report: any, title: string, type: string): string {
     let formatted = `📊 **${title}**\n\n`;
 
-    if (type === 'MONTHLY' && report.summary) {
+    if (type === 'DAILY' && report) {
+      const summary = report;
+      formatted += `💰 **Ringkasan Harian:**\n`;
+      formatted += `• Total Pengeluaran: ${this.formatCurrency(summary.totalExpenses)}\n`;
+      formatted += `• Total Pemasukan: ${this.formatCurrency(summary.totalIncome)}\n`;
+      formatted += `• Saldo Bersih: ${this.formatCurrency(summary.netAmount)}\n`;
+
+      if (summary.topExpenses && summary.topExpenses.length > 0) {
+        formatted += `\n🧾 **Pengeluaran Terbesar:**\n`;
+        summary.topExpenses.slice(0, 3).forEach((exp: any, idx: number) => {
+          formatted += `${idx + 1}. ${exp.description} - ${this.formatCurrency(exp.amount)} (${exp.categoryName || 'Tidak diketahui'})\n`;
+        });
+      }
+    } else if (type === 'MONTHLY' && report.summary) {
       const summary = report.summary;
       
       formatted += `💰 **Ringkasan Keuangan:**\n`;

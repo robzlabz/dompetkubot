@@ -67,6 +67,45 @@ export class AIRouterService {
           // Parse tool parameters
           const parameters = JSON.parse(toolCall?.function.arguments || '{}');
 
+          // Heuristics for Indonesian timeframe phrases and invalid enum coercion
+          if (toolCall?.function?.name === 'generate_report') {
+            const input = message.toLowerCase();
+            const now = new Date();
+            const allowed = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'];
+
+            // Normalize invalid or missing reportType
+            if (!parameters.reportType || !allowed.includes(parameters.reportType)) {
+              if (/\bkemarin\b/.test(input)) {
+                parameters.reportType = 'DAILY';
+                parameters.date = this.toISODate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+              } else if (/(hari ini|today)/.test(input)) {
+                parameters.reportType = 'DAILY';
+                parameters.date = this.toISODate(now);
+              } else if (/(minggu ini|pekan ini)/.test(input)) {
+                parameters.reportType = 'WEEKLY';
+                const monday = this.getWeekStart(now);
+                parameters.weekStartDate = this.toISODate(monday);
+              } else if (/(bulan ini|bulan sekarang)/.test(input)) {
+                parameters.reportType = 'MONTHLY';
+                parameters.month = now.getMonth() + 1;
+                parameters.year = now.getFullYear();
+              } else if (/(tahun ini)/.test(input)) {
+                parameters.reportType = 'YEARLY';
+                parameters.year = now.getFullYear();
+              } else if (/(beli|belanja|pengeluaran|spending|expense)/.test(input)) {
+                // Default to monthly spending overview when intent mentions purchases/expenses
+                parameters.reportType = 'MONTHLY';
+                parameters.month = now.getMonth() + 1;
+                parameters.year = now.getFullYear();
+              } else {
+                // Safe fallback
+                parameters.reportType = 'MONTHLY';
+                parameters.month = now.getMonth() + 1;
+                parameters.year = now.getFullYear();
+              }
+            }
+          }
+
           // Guard: prevent accidental expense creation for messages without amounts
           if (toolCall?.function?.name === 'create_expense') {
             const hasAmountParam = typeof parameters?.amount === 'number' && parameters.amount > 0;
@@ -233,6 +272,13 @@ export class AIRouterService {
       case 'manage_category':
         return await this.formatCategoryResponse(toolResult, transactionId);
 
+      case 'generate_report':
+        // For reports, return the tool’s formatted message directly
+        return toolResult.message || 'Laporan berhasil dibuat.';
+
+      case 'check_budget_status':
+        return toolResult.message || 'Status budget berhasil ditampilkan.';
+
       default:
         return `✅ berhasil tercatat! \`${transactionId}\` ${toolResult.message}`;
     }
@@ -271,12 +317,26 @@ export class AIRouterService {
 
     // If items exist, list each as "Rp. total - name", else single line "Rp. amount - description"
     if (expense.items && expense.items.length > 0) {
-      expense.items.forEach((item: any) => {
+      const totals = expense.items.map((item: any) => {
         const total = (typeof item.totalPrice === 'number' && !isNaN(item.totalPrice))
           ? item.totalPrice
           : (item.quantity || 0) * (item.unitPrice || 0);
-        response += `Rp. ${total.toLocaleString('id-ID')} - ${item.name}\n`;
+        return Math.max(0, total);
       });
+      const itemsSum = totals.reduce((s: number, v: number) => s + v, 0);
+      const isConsistent = itemsSum > 0 && amount > 0
+        ? Math.abs(itemsSum - amount) / Math.max(itemsSum, amount) <= 0.1
+        : itemsSum > 0;
+
+      if (isConsistent) {
+        expense.items.forEach((item: any, idx: number) => {
+          const total = totals[idx];
+          const name = (item.name && !/^item\s*\d+$/i.test(item.name)) ? item.name : description;
+          response += `Rp. ${total.toLocaleString('id-ID')} - ${name}\n`;
+        });
+      } else {
+        response += `Rp. ${amount.toLocaleString('id-ID')} - ${description}`;
+      }
     } else {
       response += `Rp. ${amount.toLocaleString('id-ID')} - ${description}`;
     }
@@ -287,6 +347,24 @@ export class AIRouterService {
     }
 
     return response;
+  }
+
+  // Helper: Get Monday of current week
+  private getWeekStart(date: Date): Date {
+    const d = new Date(date);
+    const day = d.getDay(); // 0 Sun - 6 Sat
+    const diff = day === 0 ? -6 : 1 - day; // Monday as start
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  // Helper: Format date as YYYY-MM-DD
+  private toISODate(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   /**

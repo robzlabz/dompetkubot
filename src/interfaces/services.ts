@@ -190,6 +190,7 @@ export interface IReportingService {
     averageIncome: number;
   }>;
   generateWeeklySummary(userId: string, weekStartDate: Date): Promise<any>;
+  generateDailySummary(userId: string, date: Date): Promise<any>;
   generateYearlySummary(userId: string, year: number): Promise<any>;
   generateMonthlyReport(userId: string, year: number, month: number): Promise<any>;
   generateWeeklyReport(userId: string, weekStartDate: Date): Promise<any>;
