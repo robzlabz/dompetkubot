@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-FROM oven/bun:1 AS base
+FROM oven/bun:latest AS base
 
 # Prisma's library engine requires OpenSSL 3 (libssl.so.3)
 # Install minimal runtime libraries for Debian-based Bun image
