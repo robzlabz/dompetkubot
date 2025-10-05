@@ -24,33 +24,41 @@ const SYSTEM_PROMPT = `
 Kamu adalah asisten pencatatan keuangan Telegram.
 
 Tugasmu:
-- Pahami pesan pengguna dalam bahasa alami (misal: "beli kopi 20 ribu", "gaji masuk 5 juta").
-- Tentukan apakah pesan itu pengeluaran (expense) atau pemasukan (income).
-- Tentukan kategori umum (makanan, transportasi, gaji, hiburan, dll).
-- Gunakan tool call untuk melakukan CRUD expense bila diperlukan:
-  - create_expense: membuat pengeluaran. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
-  - create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
-  - read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
-  - update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
- - delete_expense: menghapus pengeluaran. Field: expenseId (string).
- - Gunakan tool call untuk Memory/Preset System:
-   - save_memory: simpan atau perbarui preset item (key, price, unit).
-   - get_memory: ambil preset item berdasarkan key.
- - delete_memory: hapus preset item berdasarkan key.
- - Gunakan tool call untuk mengirim pesan final:
-   - send_final_message: kirim pesan final ke user dan akhiri alur. Field: text (string). Tool ini HARUS dipanggil di langkah TERAKHIR bila kamu ingin menutup jawaban melalui tool.
- - Catatan: Kamu boleh menggunakan beberapa tool call secara berurutan (multi-step) dalam satu percakapan untuk menyelesaikan tugas.
-   Contoh:
-   - get_memory → cek unit dan hitung total → create_expense
-   - read_expense → update_expense (edit transaksi yang baru)
-   - save_memory → create_expense_many (pakai preset harga untuk beberapa item)
- - Gunakan tool call untuk melakukan CRUD income bila diperlukan:
-   - create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
-   - read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
-   - update_income: memperbarui pemasukan. Field: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
-   - delete_income: menghapus pemasukan. Field: incomeId (string).
-- Jawab dengan bahasa santai dan mudah dipahami.
-- Jika masih ada yang belum dipahami, tanyakan kembali ke user.
+1. Pahami pesan pengguna dalam bahasa alami (misal: "beli kopi 20 ribu", "gaji masuk 5 juta").
+2. Tentukan apakah pesan itu pengeluaran (expense) atau pemasukan (income).
+3. Tentukan kategori umum (makanan, transportasi, gaji, hiburan, dll).
+
+Gunakan tool call secara berurutan (multi-step) untuk menyelesaikan tugas:
+- Selalu cek memory terlebih dahulu dengan get_memory sebelum membuat transaksi.
+- Gunakan save_memory untuk menyimpan preset item (key, price, unit) yang diinput pengguna. Informasi ini sangat penting untuk menghitung total pengeluaran dan pemasukan.
+- Contoh urutan optimal:
+  - get_memory → cek unit dan hitung total → create_expense
+  - save_memory → create_expense_many (pakai preset harga untuk beberapa item)
+  - read_expense → update_expense (edit transaksi yang baru)
+
+Tool call untuk CRUD expense:
+- create_expense: membuat pengeluaran. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
+- create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
+- read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
+- update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
+- delete_expense: menghapus pengeluaran. Field: expenseId (string).
+
+Tool call untuk Memory/Preset System:
+- save_memory: simpan atau perbarui preset item (key, price, unit).
+- get_memory: ambil preset item berdasarkan key.
+- delete_memory: hapus preset item berdasarkan key.
+
+Tool call untuk CRUD income:
+- create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+- read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
+- update_income: memperbarui pemasukan. Field: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+- delete_income: menghapus pemasukan. Field: incomeId (string).
+
+Tool call untuk mengirim pesan final:
+- send_final_message: kirim pesan final ke user dan akhiri alur. Field: text (string). Tool ini HARUS dipanggil di langkah TERAKHIR bila kamu ingin menutup jawaban melalui tool.
+
+Jawab dengan bahasa santai dan mudah dipahami.
+Jika masih ada yang belum dipahami, tanyakan kembali ke user.
 `;
 
 if (!TELEGRAM_BOT_TOKEN) {
@@ -142,6 +150,7 @@ bot.command("start", (ctx: any) => {
     let tokensIn = 0;
     let tokensOut = 0;
     let lastToolUsed: string | null = null;
+    let toolsUsed: string[] = [];
 
     for (let step = 0; step < 10; step++) {
       try {
@@ -161,12 +170,12 @@ bot.command("start", (ctx: any) => {
 
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
+          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls);
           messages.push(assistantMsg);
-          let summaryText: string | null = null;
-          let lastToolUsed: string | null = null;
 
           for (const toolCall of assistantMsg.tool_calls) {
             const name = toolCall.function?.name;
+            if (name) toolsUsed.push(name as string);
             let argsObj: Record<string, unknown> = {};
             try {
               argsObj = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
@@ -194,7 +203,7 @@ bot.command("start", (ctx: any) => {
                   const amount = Number(result.amount || 0);
                   const comment = String((argsObj as any).description || "");
                   const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
-                  summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
+                  // summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
                 }
               } else if (name === "create_expense_many") {
                 lastToolUsed = "create_expense_many";
@@ -204,7 +213,7 @@ bot.command("start", (ctx: any) => {
                   const amount = Number(result.amount || 0);
                   const comment = String((argsObj as any).description || "");
                   const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
-                  summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
+                  // summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
                 }
               } else if (name === "read_expense") {
                 lastToolUsed = "read_expense";
@@ -220,7 +229,7 @@ bot.command("start", (ctx: any) => {
                   result = await saveUserMemory(user.id, key, { price, unit });
                   if ((result as any)?.ok) {
                     const pretty = formatRupiah(price);
-                    summaryText = `💾 Disimpan!\n📦 Item: ${key}\n💰 Harga: ${pretty}\n⚖️ Satuan: ${unit}\n✅ Sekarang aku ingat ya! 😉`;
+                    // summaryText = `💾 Disimpan!\n📦 Item: ${key}\n💰 Harga: ${pretty}\n⚖️ Satuan: ${unit}\n✅ Sekarang aku ingat ya! 😉`;
                   }
                 }
               } else if (name === "get_memory") {
@@ -238,7 +247,7 @@ bot.command("start", (ctx: any) => {
                 const key = String((argsObj as any).key || "").trim();
                 result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
                 if ((result as any)?.ok) {
-                  summaryText = `🗑️ Oke, data ${key} sudah aku hapus dari memory.\nKalau mau, kita bisa simpan lagi versi terbaru nanti ✨`;
+                  // summaryText = `🗑️ Oke, data ${key} sudah aku hapus dari memory.\nKalau mau, kita bisa simpan lagi versi terbaru nanti ✨`;
                 }
               } else if (name === "update_expense") {
                 lastToolUsed = "update_expense";
@@ -248,7 +257,7 @@ bot.command("start", (ctx: any) => {
                   const updated = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
                   const amount = Number(updated?.amount || 0);
                   const comment = String(updated?.description || "");
-                  summaryText = formatFriendlyExpenseMessage("update", { categoryName: updated?.category?.name, amount, description: comment, date: new Date() });
+                  // summaryText = formatFriendlyExpenseMessage("update", { categoryName: updated?.category?.name, amount, description: comment, date: new Date() });
                 }
               } else if (name === "delete_expense") {
                 lastToolUsed = "delete_expense";
@@ -257,7 +266,7 @@ bot.command("start", (ctx: any) => {
                 result = await deleteExpense(argsObj as any);
                 if (result?.ok) {
                   const comment = String(existing?.description || "");
-                  summaryText = formatFriendlyExpenseMessage("delete", { categoryName: existing?.category?.name, amount: Number(existing?.amount || 0), description: comment, date: existing?.createdAt ?? new Date() });
+                  // summaryText = formatFriendlyExpenseMessage("delete", { categoryName: existing?.category?.name, amount: Number(existing?.amount || 0), description: comment, date: existing?.createdAt ?? new Date() });
                 }
               } else if (name === "create_income") {
                 lastToolUsed = "create_income";
@@ -266,7 +275,7 @@ bot.command("start", (ctx: any) => {
                   const incomeId = result.incomeId;
                   const amount = Number(result.amount || 0);
                   const comment = String((argsObj as any).description || "");
-                  summaryText = `✅ berhasil di catat\npemasukan: ${incomeId}\n\ntotal masuk ${formatRupiah(amount)}\n\n${comment}`.trim();
+                  // summaryText = `✅ berhasil di catat\npemasukan: ${incomeId}\n\ntotal masuk ${formatRupiah(amount)}\n\n${comment}`.trim();
                 }
               } else if (name === "read_income") {
                 lastToolUsed = "read_income";
@@ -279,7 +288,7 @@ bot.command("start", (ctx: any) => {
                   const updated = await prisma.income.findUnique({ where: { incomeId } });
                   const amount = Number(updated?.amount || 0);
                   const comment = String(updated?.description || "");
-                  summaryText = `✅ berhasil di edit\npemasukan: ${incomeId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
+                  // summaryText = `✅ berhasil di edit\npemasukan: ${incomeId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
                 }
               } else if (name === "delete_income") {
                 lastToolUsed = "delete_income";
@@ -288,13 +297,13 @@ bot.command("start", (ctx: any) => {
                 result = await deleteIncome(argsObj as any);
                 if (result?.ok) {
                   const comment = String(existing?.description || "");
-                  summaryText = `✅ berhasil di hapus\npemasukan: ${result.incomeId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
+                  // summaryText = `✅ berhasil di hapus\npemasukan: ${result.incomeId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
                 }
               } else if (name === "send_final_message") {
                 lastToolUsed = "send_final_message";
                 const text = String((argsObj as any).text || "");
                 result = { ok: true };
-                summaryText = text || "";
+                return ctx.send(text, { parse_mode: "Markdown" });
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
               }
@@ -366,9 +375,10 @@ bot.command("start", (ctx: any) => {
         } catch (e: any) {
           logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (final)");
         }
+        const usedStrFinal = toolsUsed.length ? toolsUsed.join(",") : null;
         await updateConversation({
           id: conv.id,
-          toolUsed: lastToolUsed ?? null,
+          toolUsed: usedStrFinal,
           tokensIn,
           tokensOut,
         });
@@ -377,7 +387,7 @@ bot.command("start", (ctx: any) => {
           message: finalText,
           role: MessageRole.ASSISTANT,
           messageType: MessageType.TEXT,
-          toolUsed: lastToolUsed ?? null,
+          toolUsed: usedStrFinal,
           coinsUsed: null,
           tokensIn: null,
           tokensOut: null,
@@ -389,9 +399,10 @@ bot.command("start", (ctx: any) => {
         return ctx.editMessageText(finalText, { parse_mode: "Markdown", message_id: thinkingMsg.id });
       } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
+        const usedStrErr = toolsUsed.length ? toolsUsed.join(",") : null;
         await updateConversation({
           id: conv.id,
-          toolUsed: lastToolUsed ?? null,
+          toolUsed: usedStrErr,
           tokensIn,
           tokensOut,
         });
@@ -400,7 +411,7 @@ bot.command("start", (ctx: any) => {
           message: "Terjadi kesalahan saat memproses pesan.",
           role: MessageRole.ASSISTANT,
           messageType: MessageType.TEXT,
-          toolUsed: lastToolUsed ?? null,
+          toolUsed: usedStrErr,
           coinsUsed: null,
           tokensIn: null,
           tokensOut: null,
@@ -411,9 +422,10 @@ bot.command("start", (ctx: any) => {
     }
 
     // Jika mencapai batas loop tanpa respons final, tutup percakapan dengan pesan default
+    const usedStrMax = toolsUsed.length ? toolsUsed.join(",") : null;
     await updateConversation({
       id: conv.id,
-      toolUsed: lastToolUsed ?? null,
+      toolUsed: usedStrMax,
       tokensIn,
       tokensOut,
     });
@@ -422,7 +434,7 @@ bot.command("start", (ctx: any) => {
       message: "Kita hentikan dulu ya, batas langkah AI tercapai.",
       role: MessageRole.ASSISTANT,
       messageType: MessageType.TEXT,
-      toolUsed: lastToolUsed ?? null,
+      toolUsed: usedStrMax,
       coinsUsed: null,
       tokensIn: null,
       tokensOut: null,
