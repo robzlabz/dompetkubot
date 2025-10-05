@@ -14,6 +14,20 @@ import { MessageType, MessageRole } from "../prisma/src/generated";
 import logger from "./services/logger";
 import { toNumber } from "./utils/money";
 import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
+
+// Helper untuk aman mengedit teks dengan fallback jika Markdown gagal
+async function safeEditMarkdown(ctx: any, text: string, messageId: number) {
+  try {
+    return await ctx.editMessageText(text, { parse_mode: "Markdown", message_id: messageId });
+  } catch (e) {
+    try {
+      return await ctx.editMessageText(text, { message_id: messageId });
+    } catch (e2) {
+      // Jika tetap gagal, kirim pesan baru sebagai fallback terakhir
+      return await ctx.send(text);
+    }
+  }
+}
 import { format } from "path";
 
 // Environment validation
@@ -315,7 +329,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
-          ctx.editMessageText(getToolProgressText(assistantMsg.tool_calls[0]?.function.name || "thinking...."), { parse_mode: "Markdown", message_id: thinkingMsg.id });
+          await safeEditMarkdown(ctx, getToolProgressText(assistantMsg.tool_calls[0]?.function.name || "thinking...."), thinkingMsg.id);
 
           messages.push(assistantMsg);
 
@@ -456,7 +470,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
         // Chat logging: log AI final response
         logger.info({ chatId, response: finalText, tokensIn, tokensOut }, "AI response sent");
 
-        return ctx.editMessageText(finalText, { parse_mode: "Markdown", message_id: thinkingMsg.id });
+        return await safeEditMarkdown(ctx, finalText, thinkingMsg.id);
       } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
         const usedStrErr = toolsUsed.length ? toolsUsed.join(",") : null;
