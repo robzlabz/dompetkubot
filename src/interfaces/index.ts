@@ -13,6 +13,7 @@ export interface IUser {
 
 export interface IExpense {
   id: string;
+  expenseId?: string;
   userId: string;
   amount: number;
   description: string;

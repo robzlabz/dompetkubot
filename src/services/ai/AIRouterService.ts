@@ -208,8 +208,10 @@ export class AIRouterService {
     const transactionId = nanoid(8);
 
     switch (toolName) {
-      case 'create_expense':
-        return await this.formatExpenseResponse(toolResult, transactionId, originalMessage, context);
+      case 'create_expense': {
+        const txId = (toolResult.data && (toolResult.data as any).expenseId) ? (toolResult.data as any).expenseId : transactionId;
+        return await this.formatExpenseResponse(toolResult, txId, originalMessage, context);
+      }
 
       case 'create_income':
         return await this.formatIncomeResponse(toolResult, transactionId, originalMessage, context);
@@ -223,8 +225,10 @@ export class AIRouterService {
       case 'redeem_voucher':
         return await this.formatVoucherResponse(toolResult, transactionId);
 
-      case 'edit_expense':
-        return await this.formatEditExpenseResponse(toolResult, transactionId);
+      case 'edit_expense': {
+        const txId = (toolResult.data && (toolResult.data as any).expenseId) ? (toolResult.data as any).expenseId : transactionId;
+        return await this.formatEditExpenseResponse(toolResult, txId);
+      }
 
       case 'manage_category':
         return await this.formatCategoryResponse(toolResult, transactionId);

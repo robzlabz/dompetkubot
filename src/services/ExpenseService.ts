@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IExpenseService } from '../interfaces/services.js';
+import { nanoid } from 'nanoid';
 import { IExpense, IExpenseItem } from '../interfaces/index.js';
 import { IExpenseRepository, ICategoryRepository } from '../interfaces/repositories.js';
 import { CalculationService, CalculationResult } from './CalculationService.js';
@@ -129,6 +130,7 @@ export class ExpenseService implements IExpenseService {
       // Create the expense
       const expenseToCreate = {
         userId,
+        expenseId: nanoid(8),
         amount: finalAmount,
         description: validatedData.description,
         categoryId: validatedData.categoryId,
@@ -246,7 +248,11 @@ export class ExpenseService implements IExpenseService {
       const validatedUpdates = UpdateExpenseSchema.parse(updates);
       
       // Verify expense exists and belongs to user
-      const existingExpense = await this.expenseRepository.findById(expenseId);
+      console.log({expenseId});
+      let existingExpense = await this.expenseRepository.findById(expenseId);
+      if (!existingExpense) {
+        existingExpense = await this.expenseRepository.findByExpenseId(expenseId);
+      }
       if (!existingExpense) {
         throw new Error('Expense not found');
       }
@@ -300,7 +306,7 @@ export class ExpenseService implements IExpenseService {
         finalUpdates.items = itemsWithTotal;
       }
 
-      return await this.expenseRepository.update(expenseId, finalUpdates);
+      return await this.expenseRepository.update(existingExpense.id, finalUpdates);
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new Error(`Validation error: ${error.errors.map(e => e.message).join(', ')}`);

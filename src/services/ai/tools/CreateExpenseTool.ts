@@ -92,7 +92,7 @@ export class CreateExpenseTool extends BaseTool {
         data: expense,
         message: `Expense created: ${params.description} - Rp ${finalAmount.toLocaleString('id-ID')}`,
         metadata: {
-          transactionId: expense.id,
+          transactionId: expense.expenseId || expense.id,
           calculationExpression,
           categoryName: chosenCategoryName,
         },

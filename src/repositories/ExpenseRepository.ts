@@ -26,6 +26,24 @@ export class ExpenseRepository extends BaseRepository<IExpense, Omit<IExpense, '
     }
   }
 
+  async findByExpenseId(expenseId: string): Promise<IExpense | null> {
+    try {
+      const expense = await this.prisma.expense.findUnique({
+        where: { expenseId },
+        include: {
+          items: true,
+          category: true,
+          user: true,
+        },
+      });
+
+      return expense ? this.mapToInterface(expense) : null;
+    } catch (error) {
+      this.handleError(error, `Failed to find expense by expenseId: ${expenseId}`);
+      throw error;
+    }
+  }
+
   async findByUserId(userId: string, limit?: number, offset?: number): Promise<IExpense[]> {
     try {
       const queryOptions: any = {
@@ -78,6 +96,7 @@ export class ExpenseRepository extends BaseRepository<IExpense, Omit<IExpense, '
       const expense = await this.prisma.expense.create({
         data: {
           userId: expenseData.userId,
+          expenseId: (expenseData as any).expenseId,
           amount: expenseData.amount,
           description: expenseData.description,
           categoryId: expenseData.categoryId,
@@ -207,6 +226,7 @@ export class ExpenseRepository extends BaseRepository<IExpense, Omit<IExpense, '
   private mapToInterface(expense: any): IExpense {
     return {
       id: expense.id,
+      expenseId: expense.expenseId,
       userId: expense.userId,
       amount: expense.amount,
       description: expense.description,

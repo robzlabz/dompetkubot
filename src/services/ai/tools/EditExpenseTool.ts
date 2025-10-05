@@ -70,7 +70,7 @@ export class EditExpenseTool extends BaseTool {
         data: updatedExpense,
         message: `Expense updated: ${updatedExpense.description} - Rp ${updatedExpense.amount.toLocaleString('id-ID')}`,
         metadata: {
-          transactionId: updatedExpense.id,
+          transactionId: updatedExpense.expenseId || updatedExpense.id,
         },
       };
     } catch (error) {

@@ -6,6 +6,7 @@ import { AIRouterService } from './services/ai/AIRouterService.js';
 import { ResponseFormatterService } from './services/ResponseFormatterService.js';
 import { OpenAIService } from './services/OpenAIService.js';
 import { ToolRegistry } from './services/ai/ToolRegistry.js';
+import { ToolFactory } from './services/ai/ToolFactory.js';
 import { SpeechToTextService } from './services/SpeechToTextService.js';
 import { OCRService } from './services/OCRService.js';
 import { WalletService } from './services/WalletService.js';
@@ -14,6 +15,8 @@ import { CalculationService } from './services/CalculationService.js';
 import { WalletRepository } from './repositories/WalletRepository.js';
 import { ExpenseRepository } from './repositories/ExpenseRepository.js';
 import { IncomeRepository } from './repositories/IncomeRepository.js';
+import { BudgetRepository } from './repositories/BudgetRepository.js';
+import { VoucherRepository } from './repositories/VoucherRepository.js';
 import { CategoryRepository } from './repositories/CategoryRepository.js';
 import { UserRepository } from './repositories/UserRepository.js';
 import { UserService } from './services/UserService.js';
@@ -22,6 +25,10 @@ import { EncryptionService } from './services/EncryptionService.js';
 import { PrivacyService } from './services/PrivacyService.js';
 import { HelpService } from './services/HelpService.js';
 import { ErrorHandlingService } from './services/ErrorHandlingService.js';
+import { IncomeService } from './services/IncomeService.js';
+import { BudgetService } from './services/BudgetService.js';
+import { ReportingService } from './services/ReportingService.js';
+import { VoucherService } from './services/VoucherService.js';
 import { PrismaClient } from '@prisma/client';
 
 let botService: TelegramBotService | null = null;
@@ -48,6 +55,8 @@ async function main() {
     const walletRepo = new WalletRepository(prisma);
     const expenseRepo = new ExpenseRepository(prisma);
     const incomeRepo = new IncomeRepository(prisma);
+    const budgetRepo = new BudgetRepository(prisma);
+    const voucherRepo = new VoucherRepository(prisma);
     const categoryRepo = new CategoryRepository(prisma);
     const userRepo = new UserRepository(prisma);
 
@@ -60,48 +69,33 @@ async function main() {
     const calculationService = new CalculationService();
     const walletService = new WalletService(walletRepo, expenseRepo, incomeRepo);
     const expenseService = new ExpenseService(expenseRepo, categoryRepo, calculationService);
+    const incomeService = new IncomeService(incomeRepo, categoryRepo, calculationService);
     const encryptionService = new EncryptionService();
     const categoryService = new CategoryService(categoryRepo, openAIService);
     const userService = new UserService(userRepo, walletRepo, categoryService);
     const privacyService = new PrivacyService(userRepo, expenseRepo, incomeRepo, conversationRepo, walletRepo, encryptionService);
     const helpService = new HelpService();
     const errorHandler = new ErrorHandlingService();
+    const budgetService = new BudgetService(budgetRepo, expenseRepo);
+    const reportingService = new ReportingService(expenseRepo, incomeRepo, categoryRepo, budgetRepo);
+    const voucherService = new VoucherService(voucherRepo, walletService);
 
-    // Initialize AI tools manually (only the ones that work)
+    // Initialize AI tools using ToolFactory (register all available tools)
     console.log('Initializing AI tools...');
-    
-    try {
-      // Import and register working tools
-      const { CreateExpenseTool } = await import('./services/ai/tools/CreateExpenseTool.js');
-      const { AddBalanceTool } = await import('./services/ai/tools/AddBalanceTool.js');
-      const { HelpTool } = await import('./services/ai/tools/HelpTool.js');
-      
-      // Register expense tool
-      const expenseTool = new CreateExpenseTool(
-        expenseService as any,
-        categoryService as any,
-        openAIService
-      );
-      toolRegistry.registerTool(expenseTool);
-      
-      // Register balance tool
-      const balanceTool = new AddBalanceTool(walletService as any);
-      toolRegistry.registerTool(balanceTool);
-      
-      // Register help tool
-      const helpTool = new HelpTool(helpService);
-      toolRegistry.registerTool(helpTool);
-      
-      console.log(`AI tools initialized: ${toolRegistry.getAllTools().length} tools`);
-      
-      // Test that tools work
-      const openAITools = toolRegistry.getOpenAITools();
-      console.log(`OpenAI tools ready: ${openAITools.length}`);
-      
-    } catch (toolError) {
-      console.error('AI tools initialization failed:', toolError);
-      console.log('Continuing without AI tools...');
-    }
+    ToolFactory.initializeTools(toolRegistry, {
+      expenseService,
+      incomeService,
+      categoryService,
+      budgetService,
+      walletService,
+      voucherService,
+      reportingService,
+      openAIService,
+      helpService,
+    });
+    console.log(`AI tools initialized: ${toolRegistry.getAllTools().length} tools`);
+    const openAITools = toolRegistry.getOpenAITools();
+    console.log(`OpenAI tools ready: ${openAITools.length}`);
 
     // Initialize AI router after tools are registered
     const aiRouter = new AIRouterService(openAIService, toolRegistry, conversationRepo);

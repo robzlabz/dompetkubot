@@ -11,6 +11,7 @@ export interface IUserRepository {
 
 export interface IExpenseRepository {
   findById(id: string): Promise<IExpense | null>;
+  findByExpenseId(expenseId: string): Promise<IExpense | null>;
   findByUserId(userId: string, limit?: number, offset?: number): Promise<IExpense[]>;
   findByUserIdAndDateRange(userId: string, startDate: Date, endDate: Date): Promise<IExpense[]>;
   create(expenseData: Omit<IExpense, 'id' | 'createdAt' | 'updatedAt'>): Promise<IExpense>;
