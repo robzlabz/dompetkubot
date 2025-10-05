@@ -7,6 +7,7 @@ import { Hooks } from "gramio";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateCOnversation } from "./services/ConversationService";
 import { MessageType } from "@prisma/client";
+import logger from "./services/logger";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -48,6 +49,9 @@ bot.command("start", (ctx: any) => {
   .on("message", async (ctx) => {
     const text = ctx.text;
     if (!text) return;
+
+    // Chat logging: log incoming chat
+    logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
 
     ctx.sendChatAction("typing");
 
@@ -119,25 +123,35 @@ bot.command("start", (ctx: any) => {
               argsObj = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
             } catch (e) {
               // Jika argumen invalid, lanjut dengan pesan error ke tool
-              messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ ok: false, error: "Argumen tidak valid" }) });
+              const errorMsg = { ok: false, error: "Argumen tidak valid" };
+              logger.warn({ tool: name, error: errorMsg }, "Tool call argument parse error");
+              messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(errorMsg) });
               continue;
             }
 
             let result: unknown;
-            if (name === "create_expense") {
-              lastToolUsed = "create_expense";
-              result = await createExpense({ ...argsObj, telegramId: chatId } as any);
-            } else if (name === "read_expense") {
-              lastToolUsed = "read_expense";
-              result = await readExpense({ ...argsObj, telegramId: chatId } as any);
-            } else if (name === "update_expense") {
-              lastToolUsed = "update_expense";
-              result = await updateExpense(argsObj as any);
-            } else if (name === "delete_expense") {
-              lastToolUsed = "delete_expense";
-              result = await deleteExpense(argsObj as any);
-            } else {
-              result = { ok: false, error: "Perintah tidak dikenal" };
+            try {
+              if (name === "create_expense") {
+                lastToolUsed = "create_expense";
+                result = await createExpense({ ...argsObj, telegramId: chatId } as any);
+              } else if (name === "read_expense") {
+                lastToolUsed = "read_expense";
+                result = await readExpense({ ...argsObj, telegramId: chatId } as any);
+              } else if (name === "update_expense") {
+                lastToolUsed = "update_expense";
+                result = await updateExpense(argsObj as any);
+              } else if (name === "delete_expense") {
+                lastToolUsed = "delete_expense";
+                result = await deleteExpense(argsObj as any);
+              } else {
+                result = { ok: false, error: "Perintah tidak dikenal" };
+              }
+
+              // Tool call logging: log tool execution result
+              logger.info({ tool: name, args: argsObj, result }, "Tool call executed");
+            } catch (toolErr: any) {
+              logger.error({ tool: name, args: argsObj, error: toolErr?.message || toolErr }, "Tool call failed");
+              result = { ok: false, error: "Tool call gagal" };
             }
 
             messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
@@ -156,8 +170,12 @@ bot.command("start", (ctx: any) => {
           tokensIn,
           tokensOut,
         });
+
+        // Chat logging: log AI final response
+        logger.info({ chatId, response: finalText, tokensIn, tokensOut }, "AI response sent");
+
         return ctx.send(finalText);
-      } catch (err) {
+      } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
         await updateCOnversation({
           id: conv.id,
@@ -166,6 +184,7 @@ bot.command("start", (ctx: any) => {
           tokensIn,
           tokensOut,
         });
+        logger.error({ chatId, error: err?.message || err }, "Agent loop error");
         return ctx.send("Maaf, terjadi kesalahan. Coba lagi ya.");
       }
     }
@@ -178,6 +197,7 @@ bot.command("start", (ctx: any) => {
       tokensIn,
       tokensOut,
     });
+    logger.warn({ chatId, tokensIn, tokensOut }, "Agent loop reached max iterations");
     return ctx.send("Kita hentikan dulu ya, batas langkah AI tercapai.");
   });
 
