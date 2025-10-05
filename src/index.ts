@@ -2,7 +2,9 @@ import { nanoid } from "nanoid";
 import { bot } from "./services/telegramBot";
 import { openai } from "./services/openai";
 import { expenseTools } from "./tools/expense";
+import { incomeTools } from "./tools/income";
 import { createExpense, readExpense, updateExpense, deleteExpense } from "./services/ExpenseService";
+import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
 import { Hooks } from "gramio";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateCOnversation } from "./services/ConversationService";
@@ -28,6 +30,11 @@ Tugasmu:
   - read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
   - update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
   - delete_expense: menghapus pengeluaran. Field: expenseId (string).
+ - Gunakan tool call untuk melakukan CRUD income bila diperlukan:
+   - create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+   - read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
+   - update_income: memperbarui pemasukan. Field: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+   - delete_income: menghapus pemasukan. Field: incomeId (string).
 - Jawab dengan bahasa santai dan mudah dipahami.
 - Jika masih ada yang belum dipahami, tanyakan kembali ke user.
 `;
@@ -101,7 +108,7 @@ bot.command("start", (ctx: any) => {
       try {
         const completion = await openai.chat.completions.create({
           model: OPENAI_MODEL,
-          tools: expenseTools as any,
+          tools: [...expenseTools, ...incomeTools] as any,
           messages,
         });
 
@@ -164,6 +171,37 @@ bot.command("start", (ctx: any) => {
                   const comment = String(existing?.description || "");
                   // Untuk hapus, tampilkan total diubah Rp. 0
                   summaryText = `✅ berhasil di hapus\ntransaksi: ${result.expenseId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
+                }
+              } else if (name === "create_income") {
+                lastToolUsed = "create_income";
+                result = await createIncome({ ...argsObj, telegramId: chatId } as any);
+                if (result?.ok) {
+                  const incomeId = result.incomeId;
+                  const amount = Number(result.amount || 0);
+                  const comment = String((argsObj as any).description || "");
+                  summaryText = `✅ berhasil di catat\npemasukan: ${incomeId}\n\ntotal masuk ${formatRupiah(amount)}\n\n${comment}`.trim();
+                }
+              } else if (name === "read_income") {
+                lastToolUsed = "read_income";
+                result = await readIncome({ ...argsObj, telegramId: chatId } as any);
+              } else if (name === "update_income") {
+                lastToolUsed = "update_income";
+                result = await updateIncome(argsObj as any);
+                if (result?.ok) {
+                  const incomeId = String(result.incomeId);
+                  const updated = await prisma.income.findUnique({ where: { incomeId } });
+                  const amount = Number(updated?.amount || 0);
+                  const comment = String(updated?.description || "");
+                  summaryText = `✅ berhasil di edit\npemasukan: ${incomeId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
+                }
+              } else if (name === "delete_income") {
+                lastToolUsed = "delete_income";
+                const incomeId = String((argsObj as any).incomeId || "");
+                const existing = incomeId ? await prisma.income.findUnique({ where: { incomeId } }) : null;
+                result = await deleteIncome(argsObj as any);
+                if (result?.ok) {
+                  const comment = String(existing?.description || "");
+                  summaryText = `✅ berhasil di hapus\npemasukan: ${result.incomeId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
                 }
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
