@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { bot } from "./services/telegramBot";
-import { openai } from "./services/openai";
+import { openai, transcribeFromUrl, transcribeFromBuffer } from "./services/openai";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
@@ -56,7 +56,27 @@ bot.command("start", (ctx: any) => {
     console.log(`✨ Bot @${info.username} telah berjalan.`);
   })
   .on("message", async (ctx) => {
-    const text = ctx.text;
+    let text: string | null = ctx.text ?? null;
+    let isVoice = false;
+    try {
+      if (!text && ctx.voice) {
+        isVoice = true;
+        // Prefer GramIO context.download() per docs: https://gramio.dev/files/download
+        let buffer: ArrayBuffer | null = null;
+        buffer = await ctx.download();
+
+        if (buffer) {
+          text = await transcribeFromBuffer(buffer, "id");
+          // response
+          // saya mendengar: ${text}
+          ctx.send(`Saya mendengar: ${text}`);
+        }
+      }
+    } catch (e: any) {
+      logger.error({ chatId: ctx.chat.id, error: e?.message || e }, "Voice transcription failed");
+      return ctx.send("Maaf, aku tidak bisa memproses voice note ini.");
+    }
+
     if (!text) return;
 
     // Chat logging: log incoming chat
@@ -87,7 +107,7 @@ bot.command("start", (ctx: any) => {
       userId: user.id,
       message: text,
       role: MessageRole.USER,
-      messageType: MessageType.TEXT,
+      messageType: isVoice ? MessageType.VOICE : MessageType.TEXT,
       toolUsed: null,
       coinsUsed: null,
       tokensIn: null,
