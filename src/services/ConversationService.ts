@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { Conversation, MessageType, MessageRole } from "@prisma/client";
+import { MessageType, MessageRole, Conversation } from "../../prisma/src/generated";
 
 export type CreateConversationArgs = {
   userId: number;

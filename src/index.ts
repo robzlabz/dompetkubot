@@ -10,7 +10,7 @@ import { createIncome, readIncome, updateIncome, deleteIncome } from "./services
 import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory, saveMemoryMany } from "./services/MemoryService";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateConversation } from "./services/ConversationService";
-import { MessageType, MessageRole } from "@prisma/client";
+import { MessageType, MessageRole } from "../prisma/src/generated";
 import logger from "./services/logger";
 import { toNumber } from "./utils/money";
 import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
