@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { env } from '../config/environment.js';
 import { IConversationRepository } from '../interfaces/repositories.js';
 import { z } from 'zod';
+import { color } from 'bun';
 
 // Types for OpenAI service
 export interface ConversationContext {
@@ -112,6 +113,7 @@ export class OpenAIService {
   ): Promise<AIResponse> {
     try {
       const messages = this.buildMessages(message, context);
+      console.debug({message})
 
       const completion = await this.callOpenAIWithRetry({
         model: env.OPENAI_MODEL,
@@ -306,7 +308,15 @@ Current user language: ${context.userPreferences?.language || 'id'}`,
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        return await this.client.chat.completions.create(params);
+        console.dir({params}, {depth:null,colors:true})
+        const response = await this.client.chat.completions.create(params);
+        // Ensure we always return a ChatCompletion, not a stream
+        if ('choices' in response) {
+          console.dir(response,{depth:null,colors:true})
+          return response as OpenAI.Chat.Completions.ChatCompletion;
+        }
+        // If a stream is returned unexpectedly, throw an error
+        throw new OpenAIServiceError('Received stream instead of ChatCompletion', 'UNEXPECTED_STREAM');
       } catch (error) {
         lastError = error as Error;
 

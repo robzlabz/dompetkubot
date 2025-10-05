@@ -44,10 +44,10 @@ export class CreateIncomeTool extends BaseTool {
         categoryId = category.id;
       }
 
-      // Create income
+      // Create income (include userId to satisfy service validation)
       const income = await this.incomeService.createIncome(userId, {
         amount: params.amount,
-        description: params.description,
+        description: params.description || 'Pendapatan',
         categoryId,
       });
 

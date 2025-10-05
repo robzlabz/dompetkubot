@@ -374,6 +374,7 @@ Proses ini mungkin memakan waktu beberapa menit.`;
                         parse_mode: 'Markdown'
                     });
                 } catch (err) {
+                    console.error('[TelegramBotService]: Error editing message:', err);
                     // Fallback: send a new message if edit fails
                     await this.bot.api.sendMessage({
                         chat_id: chatId,
