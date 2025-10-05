@@ -12,7 +12,7 @@ type ExpenseItemArg = {
 
 type CreateExpenseArgs = {
   telegramId: string;
-  categoryId?: string | null;
+  categoryId?: number | null;
   categoryName?: string | null;
   amount?: number | string | null;
   description?: string | null;
@@ -29,7 +29,7 @@ type UpdateExpenseArgs = {
   expenseId: string;
   description?: string | null;
   amount?: number | string | null;
-  categoryId?: string | null;
+  categoryId?: number | null;
   categoryName?: string | null;
   items?: ExpenseItemArg[];
 };
@@ -52,7 +52,7 @@ async function getOrCreateUserByTelegramId(telegramId: string): Promise<User> {
 }
 
 // Helper: resolve category by id or name; create if not exists
-async function resolveCategory({ userId, categoryId, categoryName }: { userId: string; categoryId?: string | null; categoryName?: string | null; }): Promise<Category> {
+async function resolveCategory({ userId, categoryId, categoryName }: { userId: number; categoryId?: number | null; categoryName?: string | null; }): Promise<Category> {
   if (categoryId) {
     const cat = await prisma.category.findUnique({ where: { id: categoryId } });
     if (cat) return cat;
@@ -111,7 +111,7 @@ export async function createExpense(args: CreateExpenseArgs): Promise<ServiceOk<
 // Create many expense items under a single expense; total amount = sum of item prices
 type CreateExpenseManyArgs = {
   telegramId: string;
-  categoryId?: string | null;
+  categoryId?: number | null;
   categoryName?: string | null;
   description?: string | null;
   items: Array<{ name: string; price: number | string; quantity?: number | string | null }>;
@@ -334,7 +334,7 @@ export async function readExpenseTotal(
     range: { start: string; end: string };
     total: number;
     count: number;
-    breakdown?: Array<{ categoryId: string; categoryName: string; total: number; count: number }>;
+    breakdown?: Array<{ categoryId: number; categoryName: string; total: number; count: number }>;
   } = {
     range: { start: start.toISOString(), end: end.toISOString() },
     total: agg._sum.amount ?? 0,
@@ -350,7 +350,7 @@ export async function readExpenseTotal(
     });
     const catIds = groups.map((g) => g.categoryId);
     const cats = await prisma.category.findMany({ where: { id: { in: catIds } } });
-    const nameMap = new Map<string, string>(cats.map((c) => [c.id, c.name]));
+    const nameMap = new Map<number, string>(cats.map((c) => [c.id, c.name]));
     result.breakdown = groups.map((g) => ({
       categoryId: g.categoryId,
       categoryName: nameMap.get(g.categoryId) || "(tidak diketahui)",

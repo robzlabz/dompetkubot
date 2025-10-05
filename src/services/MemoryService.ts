@@ -8,13 +8,13 @@ export type MemoryItem = {
 
 type MemoryData = Record<string, MemoryItem>;
 
-export async function getMemory(userId: string, key: string): Promise<MemoryItem | null> {
+export async function getMemory(userId: number, key: string): Promise<MemoryItem | null> {
   const memory = await prisma.userMemory.findUnique({ where: { userId } });
   const data = (memory?.data ?? {}) as MemoryData;
   return data[key] || null;
 }
 
-export async function saveMemory(userId: string, key: string, data: MemoryItem): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function saveMemory(userId: number, key: string, data: MemoryItem): Promise<{ ok: true } | { ok: false; error: string }> {
   const existing = await prisma.userMemory.findUnique({ where: { userId } });
   if (!existing) {
     await prisma.userMemory.create({ data: { userId, data: { [key]: data } } });
@@ -27,7 +27,7 @@ export async function saveMemory(userId: string, key: string, data: MemoryItem):
 }
 
 export async function saveMemoryMany(
-  userId: string,
+  userId: number,
   items: Array<{ key: string; price: number; unit: string }>
 ): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
   if (!items || items.length === 0) {
@@ -53,7 +53,7 @@ export async function saveMemoryMany(
   return { ok: true, saved };
 }
 
-export async function deleteMemory(userId: string, key: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deleteMemory(userId:  number, key: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const existing = await prisma.userMemory.findUnique({ where: { userId } });
   const data = (existing?.data ?? {}) as MemoryData;
   if (!data[key]) {

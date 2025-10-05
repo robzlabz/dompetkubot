@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import type { Conversation, MessageType, MessageRole } from "@prisma/client";
 
 export type CreateConversationArgs = {
-  userId: string;
+  userId: number;
   message: string;
   role: MessageRole;
   messageType: MessageType;
@@ -29,7 +29,7 @@ export async function createConversation(args: CreateConversationArgs): Promise<
 }
 
 export type CoversationByUserArgs = {
-  userId: string;
+  userId: number;
   limit?: number | null;
 };
 
@@ -45,7 +45,8 @@ export async function coversationByUser(args: CoversationByUserArgs): Promise<Co
 }
 
 export type UpdateConversationArgs = {
-  id: string;
+  id: number;
+  userId: number;
   message?: string | null;
   role?: MessageRole | null;
   messageType?: MessageType | null;
@@ -55,7 +56,7 @@ export type UpdateConversationArgs = {
   tokensOut?: number | null;
 };
 
-// Note: function name intentionally follows user's request spelling: updateCOnversation
+// Note: function name intentionally follows user's request spelling: updateConversation
 export async function updateConversation(args: UpdateConversationArgs): Promise<Conversation> {
   const updated = await prisma.conversation.update({
     where: { id: args.id },
