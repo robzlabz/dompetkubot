@@ -53,12 +53,14 @@ async function getOrCreateUserByTelegramId(telegramId: string): Promise<User> {
 
 // Helper: resolve category by id or name; create if not exists
 async function resolveCategory({ userId, categoryId, categoryName }: { userId: number; categoryId?: number | null; categoryName?: string | null; }): Promise<Category> {
-  if (categoryId) {
-    const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+  // Coerce categoryId safely to number if provided
+  const idNum = typeof categoryId === "number" ? categoryId : toNumber(categoryId as any);
+  if (typeof idNum === "number" && Number.isInteger(idNum) && idNum > 0) {
+    const cat = await prisma.category.findUnique({ where: { id: idNum } });
     if (cat) return cat;
   }
   const name = (categoryName || "Lainnya").trim();
-  const existing = await prisma.category.findFirst({ where: { userId, name } });
+  const existing = await prisma.category.findFirst({ where: { userId, name, type: "EXPENSE" } });
   if (existing) return existing as Category;
   return prisma.category.create({ data: { userId, name, type: "EXPENSE" } });
 }
