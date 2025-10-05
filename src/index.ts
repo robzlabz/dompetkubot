@@ -247,7 +247,7 @@ bot.command("start", (ctx: any) => {
         // Chat logging: log AI final response
         logger.info({ chatId, response: finalText, tokensIn, tokensOut }, "AI response sent");
 
-        return ctx.send(finalText);
+        return ctx.send(finalText, { parse_mode: "Markdown" });
       } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
         await updateCOnversation({
