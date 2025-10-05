@@ -2,13 +2,15 @@ import { bot } from "./services/telegramBot";
 import { openai, transcribeFromBuffer } from "./services/openai";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
+import { memoryTools } from "./tools/memory";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
+import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory } from "./services/MemoryService";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateConversation } from "./services/ConversationService";
 import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
-import { formatRupiah } from "./utils/money";
+import { formatRupiah, toNumber } from "./utils/money";
 import { formatFriendlyExpenseMessage } from "./utils/friendlyMessage";
 
 // Environment validation
@@ -28,7 +30,11 @@ Tugasmu:
   - create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
   - read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
   - update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
-  - delete_expense: menghapus pengeluaran. Field: expenseId (string).
+ - delete_expense: menghapus pengeluaran. Field: expenseId (string).
+ - Gunakan tool call untuk Memory/Preset System:
+   - save_memory: simpan atau perbarui preset item (key, price, unit).
+   - get_memory: ambil preset item berdasarkan key.
+   - delete_memory: hapus preset item berdasarkan key.
  - Gunakan tool call untuk melakukan CRUD income bila diperlukan:
    - create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
    - read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
@@ -127,7 +133,7 @@ bot.command("start", (ctx: any) => {
       try {
         const completion = await openai.chat.completions.create({
           model: OPENAI_MODEL,
-          tools: [...expenseTools, ...incomeTools] as any,
+          tools: [...expenseTools, ...incomeTools, ...memoryTools] as any,
           messages,
         });
 
@@ -182,6 +188,37 @@ bot.command("start", (ctx: any) => {
               } else if (name === "read_expense") {
                 lastToolUsed = "read_expense";
                 result = await readExpense({ ...argsObj, telegramId: chatId } as any);
+              } else if (name === "save_memory") {
+                lastToolUsed = "save_memory";
+                const key = String((argsObj as any).key || "").trim();
+                const price = toNumber((argsObj as any).price) ?? 0;
+                const unit = String((argsObj as any).unit || "").trim();
+                if (!key || !unit) {
+                  result = { ok: false, error: "Key dan unit wajib diisi" };
+                } else {
+                  result = await saveUserMemory(user.id, key, { price, unit });
+                  if ((result as any)?.ok) {
+                    const pretty = formatRupiah(price);
+                    summaryText = `💾 Disimpan!\n📦 Item: ${key}\n💰 Harga: ${pretty}\n⚖️ Satuan: ${unit}\n✅ Sekarang aku ingat ya! 😉`;
+                  }
+                }
+              } else if (name === "get_memory") {
+                lastToolUsed = "get_memory";
+                const key = String((argsObj as any).key || "").trim();
+                const item = key ? await getUserMemory(user.id, key) : null;
+                if (item) {
+                  result = { ok: true, key, price: item.price, unit: item.unit };
+                } else {
+                  result = { ok: false, error: "Data tidak ditemukan" };
+                }
+                // Jangan kirim summaryText agar loop bisa lanjut memakai data ini
+              } else if (name === "delete_memory") {
+                lastToolUsed = "delete_memory";
+                const key = String((argsObj as any).key || "").trim();
+                result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
+                if ((result as any)?.ok) {
+                  summaryText = `🗑️ Oke, data ${key} sudah aku hapus dari memory.\nKalau mau, kita bisa simpan lagi versi terbaru nanti ✨`;
+                }
               } else if (name === "update_expense") {
                 lastToolUsed = "update_expense";
                 result = await updateExpense(argsObj as any);
