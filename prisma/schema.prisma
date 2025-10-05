@@ -148,7 +148,7 @@ model Conversation {
   id          String      @id @default(cuid())
   userId      String
   message     String
-  response    String
+  role        MessageRole
   messageType MessageType
   toolUsed    String?
   coinsUsed   Float?
@@ -202,4 +202,5 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+  TOOL
 }

@@ -8,7 +8,7 @@ import { createIncome, readIncome, updateIncome, deleteIncome } from "./services
 import { Hooks } from "gramio";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateCOnversation } from "./services/ConversationService";
-import { MessageType } from "@prisma/client";
+import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { formatRupiah } from "./utils/money";
 
@@ -77,15 +77,15 @@ bot.command("start", (ctx: any) => {
     for (let i = history.length - 1; i >= 0; i--) {
       const c = history[i];
       if (!c) continue;
-      if (c.message) historyMessages.push({ role: "user", content: c.message });
-      if (c.response) historyMessages.push({ role: "assistant", content: c.response });
+      if (c.role === "USER" && c.message) historyMessages.push({ role: "user", content: c.message });
+      if (c.role === "ASSISTANT" && c.message) historyMessages.push({ role: "assistant", content: c.message });
     }
 
     // Buat conversation untuk transaksi ini (response dikosongkan dulu)
     const conv = await createConversation({
       userId: user.id,
       message: text,
-      response: "",
+      role: MessageRole.USER,
       messageType: MessageType.TEXT,
       toolUsed: null,
       coinsUsed: null,
@@ -215,16 +215,41 @@ bot.command("start", (ctx: any) => {
             }
 
             messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
+
+            // Catat percakapan dengan role TOOL untuk setiap eksekusi tool
+            try {
+              await createConversation({
+                userId: user.id,
+                message: JSON.stringify({ tool: name, args: argsObj, result }),
+                role: MessageRole.TOOL,
+                messageType: MessageType.TEXT,
+                toolUsed: name ?? null,
+                coinsUsed: null,
+                tokensIn: null,
+                tokensOut: null,
+              });
+            } catch (logErr: any) {
+              logger.warn({ tool: name, error: logErr?.message || logErr }, "Failed to log TOOL conversation");
+            }
           }
 
           // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
           if (summaryText) {
             await updateCOnversation({
               id: conv.id,
-              response: summaryText,
               toolUsed: lastToolUsed ?? null,
               tokensIn,
               tokensOut,
+            });
+            await createConversation({
+              userId: user.id,
+              message: summaryText,
+              role: MessageRole.ASSISTANT,
+              messageType: MessageType.TEXT,
+              toolUsed: lastToolUsed ?? null,
+              coinsUsed: null,
+              tokensIn: null,
+              tokensOut: null,
             });
             logger.info({ chatId, response: summaryText }, "Tool summary response sent");
             return ctx.send(summaryText);
@@ -238,10 +263,19 @@ bot.command("start", (ctx: any) => {
         const finalText = assistantMsg.content ?? "Maaf, aku belum bisa memahami.";
         await updateCOnversation({
           id: conv.id,
-          response: finalText,
           toolUsed: lastToolUsed ?? null,
           tokensIn,
           tokensOut,
+        });
+        await createConversation({
+          userId: user.id,
+          message: finalText,
+          role: MessageRole.ASSISTANT,
+          messageType: MessageType.TEXT,
+          toolUsed: lastToolUsed ?? null,
+          coinsUsed: null,
+          tokensIn: null,
+          tokensOut: null,
         });
 
         // Chat logging: log AI final response
@@ -252,10 +286,19 @@ bot.command("start", (ctx: any) => {
         // Jika error, update conversation dan kirim pesan gagal
         await updateCOnversation({
           id: conv.id,
-          response: "Terjadi kesalahan saat memproses pesan.",
           toolUsed: lastToolUsed ?? null,
           tokensIn,
           tokensOut,
+        });
+        await createConversation({
+          userId: user.id,
+          message: "Terjadi kesalahan saat memproses pesan.",
+          role: MessageRole.ASSISTANT,
+          messageType: MessageType.TEXT,
+          toolUsed: lastToolUsed ?? null,
+          coinsUsed: null,
+          tokensIn: null,
+          tokensOut: null,
         });
         logger.error({ chatId, error: err?.message || err }, "Agent loop error");
         return ctx.send("Maaf, terjadi kesalahan. Coba lagi ya.");
@@ -265,10 +308,19 @@ bot.command("start", (ctx: any) => {
     // Jika mencapai batas loop tanpa respons final, tutup percakapan dengan pesan default
     await updateCOnversation({
       id: conv.id,
-      response: "Kita hentikan dulu ya, batas langkah AI tercapai.",
       toolUsed: lastToolUsed ?? null,
       tokensIn,
       tokensOut,
+    });
+    await createConversation({
+      userId: user.id,
+      message: "Kita hentikan dulu ya, batas langkah AI tercapai.",
+      role: MessageRole.ASSISTANT,
+      messageType: MessageType.TEXT,
+      toolUsed: lastToolUsed ?? null,
+      coinsUsed: null,
+      tokensIn: null,
+      tokensOut: null,
     });
     logger.warn({ chatId, tokensIn, tokensOut }, "Agent loop reached max iterations");
     return ctx.send("Kita hentikan dulu ya, batas langkah AI tercapai.");

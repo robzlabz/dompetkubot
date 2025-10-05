@@ -1,10 +1,10 @@
 import { prisma } from "./prisma";
-import type { Conversation, MessageType } from "@prisma/client";
+import type { Conversation, MessageType, MessageRole } from "@prisma/client";
 
 export type CreateConversationArgs = {
   userId: string;
   message: string;
-  response: string;
+  role: MessageRole;
   messageType: MessageType;
   toolUsed?: string | null;
   coinsUsed?: number | null;
@@ -17,7 +17,7 @@ export async function createConversation(args: CreateConversationArgs): Promise<
     data: {
       userId: args.userId,
       message: args.message,
-      response: args.response,
+      role: args.role,
       messageType: args.messageType,
       toolUsed: args.toolUsed ?? null,
       coinsUsed: args.coinsUsed ?? null,
@@ -47,7 +47,7 @@ export async function coversationByUser(args: CoversationByUserArgs): Promise<Co
 export type UpdateConversationArgs = {
   id: string;
   message?: string | null;
-  response?: string | null;
+  role?: MessageRole | null;
   messageType?: MessageType | null;
   toolUsed?: string | null;
   coinsUsed?: number | null;
@@ -61,7 +61,7 @@ export async function updateCOnversation(args: UpdateConversationArgs): Promise<
     where: { id: args.id },
     data: {
       message: args.message ?? undefined,
-      response: args.response ?? undefined,
+      role: args.role ?? undefined,
       messageType: args.messageType ?? undefined,
       toolUsed: args.toolUsed ?? undefined,
       coinsUsed: args.coinsUsed ?? undefined,
