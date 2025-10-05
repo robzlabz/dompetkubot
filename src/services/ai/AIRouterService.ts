@@ -65,25 +65,31 @@ export class AIRouterService {
 
         try {
           // Parse tool parameters
-          const parameters = JSON.parse(toolCall.function.arguments);
+          const parameters = JSON.parse(toolCall?.function.arguments || '{}');
 
           // Execute the tool
           const toolResult = await this.toolRegistry.executeTool(
-            toolCall.function.name,
+            toolCall?.function.name || '',
             parameters,
             userId
           );
 
           // Generate formatted response
           const formattedResponse = await this.formatToolResponse(
-            toolCall.function.name,
+            toolCall?.function.name || '',
             toolResult,
             message,
             context
           );
 
           // Store assistant response
-          await this.storeConversation(userId, formattedResponse, 'assistant');
+          await this.storeConversation(
+            userId,
+            formattedResponse,
+            'assistant',
+            aiResponse.usage?.promptTokens,
+            aiResponse.usage?.completionTokens
+          );
 
           return {
             toolCall,
@@ -133,7 +139,13 @@ export class AIRouterService {
 
       // Return AI response or fallback
       const response = aiResponse.content || this.getFallbackResponse(message);
-      await this.storeConversation(userId, response, 'assistant');
+      await this.storeConversation(
+        userId,
+        response,
+        'assistant',
+        aiResponse.usage?.promptTokens,
+        aiResponse.usage?.completionTokens
+      );
 
       return {
         response,
@@ -213,6 +225,7 @@ export class AIRouterService {
     const expense = toolResult.data;
     const amount = expense.amount;
     const description = expense.description;
+    const categoryName = (expense?.category?.name) || ((toolResult.metadata as any)?.categoryName);
 
     // Generate personalized comment
     const comment = await this.openAIService.generatePersonalizedComment(
@@ -222,25 +235,31 @@ export class AIRouterService {
       context
     );
 
-    let response = `✅ berhasil tercatat! \`${transactionId}\``;
-
-    // Add calculation if present
-    if (toolResult.metadata?.calculationExpression) {
-      response += ` ${toolResult.metadata.calculationExpression} = Rp ${amount.toLocaleString('id-ID')}`;
-    } else {
-      response += ` ${description} Rp ${amount.toLocaleString('id-ID')}`;
+    // Build response to match requested template
+    let response = `✅ berhasil tercatat!\n`;
+    response += `id transaksi: \`${transactionId}\``;
+    if (categoryName) {
+      response += `\nkategori: ${categoryName} (di generate dari ai dan di catat di sistem)`;
     }
 
-    // Add items breakdown if present
+    response += `\n\n`;
+
+    // If items exist, list each as "Rp. total - name", else single line "Rp. amount - description"
     if (expense.items && expense.items.length > 0) {
-      response += '\n\nItems:';
       expense.items.forEach((item: any) => {
-        response += `\n• ${item.name} ${item.quantity}x @ Rp ${item.unitPrice.toLocaleString('id-ID')} = Rp ${item.totalPrice.toLocaleString('id-ID')}`;
+        const total = (typeof item.totalPrice === 'number' && !isNaN(item.totalPrice))
+          ? item.totalPrice
+          : (item.quantity || 0) * (item.unitPrice || 0);
+        response += `Rp. ${total.toLocaleString('id-ID')} - ${item.name}\n`;
       });
+    } else {
+      response += `Rp. ${amount.toLocaleString('id-ID')} - ${description}`;
     }
 
-    // Add personalized comment
-    response += `\n\n${comment}`;
+    // Add personalized short comment
+    if (comment) {
+      response += `\n\n"${comment}"`;
+    }
 
     return response;
   }
@@ -323,13 +342,13 @@ export class AIRouterService {
     const action = toolResult.metadata?.action || 'updated';
     const category = toolResult.data;
 
-    const actionText = {
+    const actionText: Record<string, string> = {
       created: 'dibuat',
       updated: 'diperbarui',
       deleted: 'dihapus',
-    }[action] || 'diproses';
+    };
 
-    return `✅ berhasil tercatat! \`${transactionId}\` Kategori "${category.name}" ${actionText}\n\nKategori berhasil ${actionText}!`;
+    return `✅ berhasil tercatat! \`${transactionId}\` Kategori "${category.name}" ${actionText[action] || 'diproses'}\n\nKategori berhasil ${actionText[action] || 'diproses'}!`;
   }
 
   /**
@@ -356,7 +375,9 @@ export class AIRouterService {
   private async storeConversation(
     userId: string,
     message: string,
-    role: 'user' | 'assistant'
+    role: 'user' | 'assistant',
+    tokensIn?: number,
+    tokensOut?: number
   ): Promise<void> {
     try {
       await this.conversationRepo.create({
@@ -366,6 +387,8 @@ export class AIRouterService {
         messageType: 'TEXT',
         toolUsed: undefined,
         coinsUsed: undefined,
+        tokensIn,
+        tokensOut,
       });
     } catch (error) {
       console.error('Error storing conversation:', error);

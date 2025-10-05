@@ -82,6 +82,8 @@ export interface IConversation {
   messageType: 'TEXT' | 'VOICE' | 'PHOTO';
   toolUsed?: string;
   coinsUsed?: number;
+  tokensIn?: number;
+  tokensOut?: number;
   createdAt: Date;
 }
 

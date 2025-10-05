@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Tool, ToolResult } from '../ToolRegistry.js';
+import { BaseTool, ToolResult } from '../ToolRegistry.js';
 import { HelpService } from '../../HelpService.js';
 
 const HelpToolSchema = z.object({
@@ -7,7 +7,7 @@ const HelpToolSchema = z.object({
     query: z.string().optional().describe('Specific question or unclear input from user')
 });
 
-export class HelpTool implements Tool {
+export class HelpTool extends BaseTool {
     name = 'help_tool';
     description = 'Provides help information and guidance for users, especially when input is unclear or user needs assistance';
     parameters = HelpToolSchema;
@@ -15,6 +15,7 @@ export class HelpTool implements Tool {
     private helpService: HelpService;
 
     constructor(helpService: HelpService) {
+        super();
         this.helpService = helpService;
     }
 
@@ -74,7 +75,8 @@ export class HelpTool implements Tool {
             return {
                 success: false,
                 error: 'Maaf, terjadi kesalahan saat mengambil informasi bantuan. Ketik /help untuk panduan lengkap.',
-                data: { helpProvided: false }
+                data: { helpProvided: false },
+                message: 'Maaf, terjadi kesalahan saat mengambil informasi bantuan. Ketik /help untuk panduan lengkap.'
             };
         }
     }

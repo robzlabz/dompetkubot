@@ -74,6 +74,8 @@ export class ConversationRepository extends BaseRepository<IConversation, Omit<I
           messageType: conversationData.messageType,
           toolUsed: conversationData.toolUsed,
           coinsUsed: conversationData.coinsUsed,
+          tokensIn: conversationData.tokensIn,
+          tokensOut: conversationData.tokensOut,
         },
       });
 
@@ -194,6 +196,8 @@ export class ConversationRepository extends BaseRepository<IConversation, Omit<I
       messageType: conversation.messageType,
       toolUsed: conversation.toolUsed,
       coinsUsed: conversation.coinsUsed,
+      tokensIn: conversation.tokensIn,
+      tokensOut: conversation.tokensOut,
       createdAt: conversation.createdAt,
     };
   }

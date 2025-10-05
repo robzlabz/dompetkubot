@@ -150,6 +150,8 @@ model Conversation {
   messageType MessageType
   toolUsed    String?
   coinsUsed   Float?
+  tokensIn    Int?
+  tokensOut   Int?
   createdAt   DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

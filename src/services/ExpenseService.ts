@@ -68,7 +68,8 @@ export class ExpenseService implements IExpenseService {
   async createExpense(userId: string, expenseData: CreateExpenseData): Promise<IExpense> {
     try {
       // Validate input data
-      const validatedData = CreateExpenseSchema.parse(expenseData);
+      // Include function argument userId in validation to satisfy schema
+      const validatedData = CreateExpenseSchema.parse({ ...expenseData, userId });
       
       // Verify user has access to the category
       const category = await this.categoryRepository.findById(validatedData.categoryId);

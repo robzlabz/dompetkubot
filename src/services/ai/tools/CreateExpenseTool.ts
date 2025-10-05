@@ -53,7 +53,9 @@ export class CreateExpenseTool extends BaseTool {
 
       // Auto-categorize if category not provided
       let categoryId: string;
+      let chosenCategoryName: string | undefined;
       if (params.category) {
+        chosenCategoryName = params.category;
         const category = await this.categoryService.findOrCreateCategory(
           userId,
           params.category,
@@ -63,6 +65,7 @@ export class CreateExpenseTool extends BaseTool {
       } else {
         // Use AI to categorize
         const categoryName = await this.categorizeExpense(params.description);
+        chosenCategoryName = categoryName;
         const category = await this.categoryService.findOrCreateCategory(
           userId,
           categoryName,
@@ -91,6 +94,7 @@ export class CreateExpenseTool extends BaseTool {
         metadata: {
           transactionId: expense.id,
           calculationExpression,
+          categoryName: chosenCategoryName,
         },
       };
     } catch (error) {

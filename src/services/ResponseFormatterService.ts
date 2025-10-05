@@ -88,7 +88,8 @@ export class ResponseFormatterService {
     const expense = toolResult.data;
     const amount = expense.amount;
     const description = expense.description;
-    
+    const categoryName = (expense?.category?.name) || ((toolResult.metadata as any)?.categoryName);
+
     // Generate personalized comment
     const comment = options.personalizedComment || await this.openAIService.generatePersonalizedComment(
       'expense',
@@ -97,32 +98,30 @@ export class ResponseFormatterService {
       context
     );
 
-    let response = '✅ berhasil tercatat! `' + transactionId + '`';
-    
-    // Add calculation display if present
-    if (toolResult.metadata?.calculationExpression && options.includeCalculation !== false) {
-      response += ` ${this.formatCalculationDisplay(
-        toolResult.metadata.calculationExpression,
-        amount
-      )}`;
-      
-      // Add detailed breakdown for complex calculations
-      if ((toolResult.metadata as any)?.calculationResult) {
-        response += this.formatCalculationBreakdown((toolResult.metadata as any).calculationResult);
-      }
-    } else {
-      response += ` ${description} ${this.formatCurrency(amount)}`;
+    // Build response to match requested template
+    let response = `✅ berhasil tercatat!\n`;
+    response += `id transaksi: \`${transactionId}\``;
+    if (categoryName) {
+      response += `\nkategori: ${categoryName} (di generate dari ai dan di catat di sistem)`;
     }
+    response += `\n\n`;
 
-    // Add itemized breakdown if present (for receipts)
+    // If items exist, list each as "Rp. total - name", else single line "Rp. amount - description"
     const hasItems = expense.items && expense.items.length > 0;
-    if (hasItems && options.includeItems !== false) {
-      response += this.formatItemizedBreakdown(expense.items);
+    if (hasItems) {
+      expense.items.forEach((item: any) => {
+        const total = (typeof item.totalPrice === 'number' && !isNaN(item.totalPrice))
+          ? item.totalPrice
+          : (item.quantity || 0) * (item.unitPrice || 0);
+        response += `Rp. ${total.toLocaleString('id-ID')} - ${item.name}\n`;
+      });
+    } else {
+      response += `Rp. ${amount.toLocaleString('id-ID')} - ${description}`;
     }
 
-    // Add personalized comment
+    // Add personalized short comment
     if (comment) {
-      response += `\n\n${comment}`;
+      response += `\n\n"${comment}"`;
     }
 
     return {
