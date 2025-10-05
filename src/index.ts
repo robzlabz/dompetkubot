@@ -5,7 +5,7 @@ import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { memoryTools } from "./tools/memory";
 import { finalTools } from "./tools/final";
-import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
+import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany, readExpenseRange, readExpenseTotal } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
 import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory, saveMemoryMany } from "./services/MemoryService";
 import { prisma } from "./services/prisma";
@@ -40,6 +40,8 @@ Tool call untuk CRUD expense:
 - create_expense: membuat pengeluaran. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
 - create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
 - read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
+- read_expense_range: membaca pengeluaran dalam rentang tanggal. Field: telegramId (string), dateStart (string), dateEnd (string), limit (number|null).
+- read_expense_total: mendapatkan total pengeluaran berdasarkan periode. Field: telegramId (string), range ("today"|"this_week"|"this_month"|"custom"), dateStart (string|null), dateEnd (string|null), groupBy ("none"|"category").
 - update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
 - delete_expense: menghapus pengeluaran. Field: expenseId (string).
 
@@ -237,6 +239,21 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
                 result = await createExpenseMany({ ...argsObj, telegramId: chatId } as any);
               } else if (name === "read_expense") {
                 result = await readExpense({ ...argsObj, telegramId: chatId } as any);
+              } else if (name === "read_expense_range") {
+                const dateStart = String((argsObj as any).dateStart || "");
+                const dateEnd = String((argsObj as any).dateEnd || "");
+                const limit = (argsObj as any).limit ?? null;
+                if (!dateStart || !dateEnd) {
+                  result = { ok: false, error: "dateStart dan dateEnd wajib diisi" };
+                } else {
+                  result = await readExpenseRange({ telegramId: chatId, dateStart, dateEnd, limit } as any);
+                }
+              } else if (name === "read_expense_total") {
+                const range = String((argsObj as any).range || "today");
+                const dateStart = (argsObj as any).dateStart ?? null;
+                const dateEnd = (argsObj as any).dateEnd ?? null;
+                const groupBy = String((argsObj as any).groupBy || "none");
+                result = await readExpenseTotal({ telegramId: chatId, range, dateStart, dateEnd, groupBy } as any);
               } else if (name === "save_memory") {
                 const key = String((argsObj as any).key || "").trim();
                 const price = toNumber((argsObj as any).price) ?? 0;

@@ -233,3 +233,131 @@ export async function deleteExpense(args: DeleteExpenseArgs): Promise<ServiceOk<
   await prisma.expense.delete({ where: { id: existing.id } });
   return { ok: true, expenseId };
 }
+
+// New: read expenses by date range
+type ReadExpenseRangeArgs = {
+  telegramId: string;
+  dateStart: string; // ISO string or yyyy-mm-dd
+  dateEnd: string;   // ISO string or yyyy-mm-dd
+  limit?: number | null;
+};
+
+export async function readExpenseRange(
+  args: ReadExpenseRangeArgs
+): Promise<ServiceOk<{ data: ExpenseWithRelations[] }> | ServiceErr> {
+  const telegramId = String(args.telegramId);
+  const user = await getOrCreateUserByTelegramId(telegramId);
+
+  const start = new Date(args.dateStart);
+  const end = new Date(args.dateEnd);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return { ok: false, error: "Invalid date range" };
+  }
+
+  // Normalize end to end-of-day if start/end are date-only strings
+  if (args.dateEnd.length <= 10) {
+    end.setHours(23, 59, 59, 999);
+  }
+  const list = await prisma.expense.findMany({
+    where: { userId: user.id, createdAt: { gte: start, lte: end } },
+    orderBy: { createdAt: "desc" },
+    take: typeof args.limit === "number" && args.limit > 0 ? args.limit : undefined,
+    include: { items: true, category: true },
+  });
+  return { ok: true, data: list as ExpenseWithRelations[] };
+}
+
+// New: read total expenses within a range (today/this_week/this_month/custom)
+type ReadExpenseTotalArgs = {
+  telegramId: string;
+  range?: "today" | "this_week" | "this_month" | "custom";
+  dateStart?: string | null;
+  dateEnd?: string | null;
+  groupBy?: "category" | "none";
+};
+
+function computeRange(range?: string, dateStart?: string | null, dateEnd?: string | null) {
+  const now = new Date();
+  let start: Date;
+  let end: Date;
+  const r = range || "today";
+  if (r === "custom" && dateStart && dateEnd) {
+    start = new Date(dateStart);
+    end = new Date(dateEnd);
+  } else if (r === "this_month") {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  } else if (r === "this_week") {
+    const d = new Date(now);
+    const day = d.getDay(); // 0=Sun..6=Sat
+    const diffToMonday = (day + 6) % 7; // Monday=0
+    start = new Date(d);
+    start.setDate(d.getDate() - diffToMonday);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  } else {
+    // today
+    start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+  }
+  return { start, end };
+}
+
+export async function readExpenseTotal(
+  args: ReadExpenseTotalArgs
+): Promise<
+  ServiceOk<{
+    range: { start: string; end: string };
+    total: number;
+    count: number;
+    breakdown?: Array<{ categoryId: string; categoryName: string; total: number; count: number }>;
+  }> | ServiceErr
+> {
+  const telegramId = String(args.telegramId);
+  const user = await getOrCreateUserByTelegramId(telegramId);
+  const { start, end } = computeRange(args.range, args.dateStart, args.dateEnd);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return { ok: false, error: "Invalid date range" };
+  }
+
+  const agg = await prisma.expense.aggregate({
+    where: { userId: user.id, createdAt: { gte: start, lte: end } },
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+
+  const result: {
+    range: { start: string; end: string };
+    total: number;
+    count: number;
+    breakdown?: Array<{ categoryId: string; categoryName: string; total: number; count: number }>;
+  } = {
+    range: { start: start.toISOString(), end: end.toISOString() },
+    total: agg._sum.amount ?? 0,
+    count: (agg._count as any)?._all ?? 0,
+  };
+
+  if ((args.groupBy || "none") === "category") {
+    const groups = await prisma.expense.groupBy({
+      by: ["categoryId"],
+      where: { userId: user.id, createdAt: { gte: start, lte: end } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const catIds = groups.map((g) => g.categoryId);
+    const cats = await prisma.category.findMany({ where: { id: { in: catIds } } });
+    const nameMap = new Map<string, string>(cats.map((c) => [c.id, c.name]));
+    result.breakdown = groups.map((g) => ({
+      categoryId: g.categoryId,
+      categoryName: nameMap.get(g.categoryId) || "(tidak diketahui)",
+      total: g._sum.amount ?? 0,
+      count: (g._count as any)?._all ?? 0,
+    }));
+  }
+
+  return { ok: true, ...result } as any;
+}

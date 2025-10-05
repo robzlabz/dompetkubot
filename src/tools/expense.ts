@@ -76,6 +76,41 @@ export const expenseTools = [
   {
     type: "function",
     function: {
+      name: "read_expense_range",
+      description: "Read expenses within a specific date range (inclusive).",
+      parameters: {
+        type: "object",
+        properties: {
+          telegramId: { type: "string" },
+          dateStart: { type: "string", description: "Start date (ISO or yyyy-mm-dd)" },
+          dateEnd: { type: "string", description: "End date (ISO or yyyy-mm-dd)" },
+          limit: { type: ["number", "null"] },
+        },
+        required: ["telegramId", "dateStart", "dateEnd"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_expense_total",
+      description: "Get total expenses for a range (today, this_week, this_month, or custom).",
+      parameters: {
+        type: "object",
+        properties: {
+          telegramId: { type: "string" },
+          range: { type: "string", enum: ["today", "this_week", "this_month", "custom"] },
+          dateStart: { type: ["string", "null"], description: "Custom start date (ISO or yyyy-mm-dd)" },
+          dateEnd: { type: ["string", "null"], description: "Custom end date (ISO or yyyy-mm-dd)" },
+          groupBy: { type: "string", enum: ["none", "category"], default: "none" },
+        },
+        required: ["telegramId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "update_expense",
       description: "Update expense by expenseId (description, amount, category, items).",
       parameters: {
