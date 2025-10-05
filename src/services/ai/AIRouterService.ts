@@ -48,8 +48,6 @@ export class AIRouterService {
       // Get conversation context
       const context = await this.openAIService.getConversationContext(userId);
 
-      // Do not create conversation here to avoid duplicates; TelegramBotService manages create/update
-
       // Get available tools
       const tools = this.toolRegistry.getOpenAITools();
 
@@ -59,6 +57,7 @@ export class AIRouterService {
         context,
         tools
       );
+
 
       // If AI wants to use a tool
       if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {

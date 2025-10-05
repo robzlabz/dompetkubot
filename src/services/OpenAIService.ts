@@ -52,7 +52,7 @@ export class OpenAIServiceError extends Error {
 export class OpenAIService {
   private client: OpenAI;
   private conversationRepo: IConversationRepository;
-  private readonly maxContextMessages = 10;
+  private readonly maxContextMessages = 100;
   private readonly maxRetries = 3;
   private readonly retryDelay = 1000; // 1 second
 
@@ -78,13 +78,13 @@ export class OpenAIService {
 
       const recentMessages = recentConversations.flatMap(conv => [
         {
-          role: 'assistant' as const,
-          content: conv.response,
+          role: 'user' as const,
+          content: conv.message.substring(0, 100),
           timestamp: conv.createdAt,
         },
         {
-          role: 'user' as const,
-          content: conv.message,
+          role: 'assistant' as const,
+          content: conv.response.substring(0, 100),
           timestamp: conv.createdAt,
         },
       ]);
@@ -121,7 +121,10 @@ export class OpenAIService {
     try {
       const messages = this.buildMessages(message, context);
 
-      console.dir({messages}, {depth:null,colors:true})
+      messages.forEach(function(msg) { 
+        console.log('------------------');
+        console.log(`💬 ${msg.role} → ${msg.content}`); 
+      });
 
       const completion = await this.callOpenAIWithRetry({
         model: env.OPENAI_MODEL,
@@ -318,7 +321,6 @@ Current timestamp: ${new Date().toISOString()}
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.dir({params}, {depth:null,colors:true})
         const response = await this.client.chat.completions.create(params);
         // Ensure we always return a ChatCompletion, not a stream
         if ('choices' in response) {

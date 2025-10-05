@@ -16,7 +16,7 @@
     "test:watch": "bun test --watch"
   },
   "dependencies": {
-    "@prisma/client": "latest",
+    "@prisma/client": "^6.16.3",
     "gramio": "^0.4.11",
     "nanoid": "^5.0.4",
     "openai": "^4.20.0",
