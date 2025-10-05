@@ -10,6 +10,8 @@ export interface RouteResult {
   metadata?: {
     confidence?: number;
     alternativeTools?: string[];
+    tokensIn?: number;
+    tokensOut?: number;
   };
 }
 
@@ -46,8 +48,7 @@ export class AIRouterService {
       // Get conversation context
       const context = await this.openAIService.getConversationContext(userId);
 
-      // Store user message in conversation history
-      await this.storeConversation(userId, message, 'user');
+      // Do not create conversation here to avoid duplicates; TelegramBotService manages create/update
 
       // Get available tools
       const tools = this.toolRegistry.getOpenAITools();
@@ -112,17 +113,14 @@ export class AIRouterService {
             const containsNumericHint = /(?:\d|rp\.?|idr|rb|ribu|jt|juta|k)/i.test(message);
             if (!hasAmountParam && !containsNumericHint) {
               const guardedResponse = this.getFallbackResponse(message);
-              await this.storeConversation(
-                userId,
-                guardedResponse,
-                'assistant',
-                aiResponse.usage?.promptTokens,
-                aiResponse.usage?.completionTokens
-              );
               return {
                 response: guardedResponse,
                 requiresToolExecution: false,
-                metadata: { confidence: 0.5 },
+                metadata: { 
+                  confidence: 0.5,
+                  tokensIn: aiResponse.usage?.promptTokens,
+                  tokensOut: aiResponse.usage?.completionTokens,
+                },
               };
             }
           }
@@ -142,29 +140,19 @@ export class AIRouterService {
             context
           );
 
-          // Store assistant response
-          await this.storeConversation(
-            userId,
-            formattedResponse,
-            'assistant',
-            aiResponse.usage?.promptTokens,
-            aiResponse.usage?.completionTokens
-          );
-
           return {
             toolCall,
             response: formattedResponse,
             requiresToolExecution: true,
             metadata: {
               confidence: 0.9, // High confidence when tool is called
+              tokensIn: aiResponse.usage?.promptTokens,
+              tokensOut: aiResponse.usage?.completionTokens,
             },
           };
         } catch (error) {
           console.error('Error executing tool:', error);
-
           const errorResponse = 'Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi.';
-          await this.storeConversation(userId, errorResponse, 'assistant');
-
           return {
             response: errorResponse,
             requiresToolExecution: false,
@@ -183,12 +171,13 @@ export class AIRouterService {
           );
 
           if (helpResult.success && helpResult.message) {
-            await this.storeConversation(userId, helpResult.message, 'assistant');
             return {
               response: helpResult.message,
               requiresToolExecution: false,
               metadata: {
                 confidence: 0.6, // Medium confidence for help responses
+                tokensIn: aiResponse.usage?.promptTokens,
+                tokensOut: aiResponse.usage?.completionTokens,
               },
             };
           }
@@ -199,28 +188,19 @@ export class AIRouterService {
 
       // Return AI response or fallback
       const response = aiResponse.content || this.getFallbackResponse(message);
-      await this.storeConversation(
-        userId,
-        response,
-        'assistant',
-        aiResponse.usage?.promptTokens,
-        aiResponse.usage?.completionTokens
-      );
-
       return {
         response,
         requiresToolExecution: false,
         metadata: {
           confidence: aiResponse.content ? 0.7 : 0.4, // Lower confidence for fallback
+          tokensIn: aiResponse.usage?.promptTokens,
+          tokensOut: aiResponse.usage?.completionTokens,
         },
       };
     } catch (error) {
       console.error('Error in AI routing:', error);
-
       // Try to provide helpful fallback based on user input
       const fallbackResponse = this.getFallbackResponse(message);
-      await this.storeConversation(userId, fallbackResponse, 'assistant');
-
       return {
         response: fallbackResponse,
         requiresToolExecution: false,

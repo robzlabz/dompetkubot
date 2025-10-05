@@ -487,17 +487,16 @@ Proses ini mungkin memakan waktu beberapa menit.`;
                 messageType: 'TEXT',
             });
 
-            // Get conversation context for AI
-            const recentConversations = await this.conversationRepo.findRecentByUserId(context.userId, 5);
-
             try {
                 // Route through AI system
                 const result = await this.aiRouter.routeMessage(text, context.userId);
 
-                // Update conversation with response
+                // Update conversation with response and token usage
                 await this.conversationRepo.update(conversation.id, {
                     response: result.response,
                     toolUsed: result.toolCall?.function?.name,
+                    tokensIn: result.metadata?.tokensIn,
+                    tokensOut: result.metadata?.tokensOut,
                 });
 
                 return result.response;
@@ -722,10 +721,12 @@ Anda dapat melanjutkan menggunakan bot seperti biasa.`;
             // Route transcribed text through AI system
             const result = await this.aiRouter.routeMessage(transcribedText, context.userId);
 
-            // Update conversation with final response
+            // Update conversation with final response and token usage
             await this.conversationRepo.update(conversation.id, {
                 response: result.response,
                 toolUsed: result.toolCall?.function?.name,
+                tokensIn: result.metadata?.tokensIn,
+                tokensOut: result.metadata?.tokensOut,
             });
 
             // Add transcription info to response

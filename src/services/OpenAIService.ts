@@ -76,11 +76,18 @@ export class OpenAIService {
         this.maxContextMessages
       );
 
-      const recentMessages = recentConversations.map(conv => ({
-        role: 'user' as const,
-        content: conv.message,
-        timestamp: conv.createdAt,
-      }));
+      const recentMessages = recentConversations.flatMap(conv => [
+        {
+          role: 'assistant' as const,
+          content: conv.response,
+          timestamp: conv.createdAt,
+        },
+        {
+          role: 'user' as const,
+          content: conv.message,
+          timestamp: conv.createdAt,
+        },
+      ]);
 
       return {
         userId,
@@ -113,7 +120,8 @@ export class OpenAIService {
   ): Promise<AIResponse> {
     try {
       const messages = this.buildMessages(message, context);
-      console.debug({message})
+
+      console.dir({messages}, {depth:null,colors:true})
 
       const completion = await this.callOpenAIWithRetry({
         model: env.OPENAI_MODEL,
@@ -270,18 +278,20 @@ Key guidelines:
 - Be friendly, casual, and helpful
 - Help users track expenses, income, set budgets, and manage their wallet
 - Use tools when users want to perform financial actions
-- Understand Indonesian number formats (rb = ribu/thousand, jt = juta/million)
+- Understand Indonesian number formats (rb = ribu/thousand, jt = juta/million, k = ribu)
 - Parse mathematical expressions like "5kg @ 10rb" as 5 × 10,000 = 50,000
 
 Current user timezone: ${context.userPreferences?.timezone || 'Asia/Jakarta'}
-Current user language: ${context.userPreferences?.language || 'id'}`,
+Current user language: ${context.userPreferences?.language || 'id'}
+Current timestamp: ${new Date().toISOString()}
+`,
     };
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [systemMessage];
 
     // Add recent conversation history
     context.recentMessages
-      .slice(-5) // Last 5 messages for context
+      // .slice(-5) // Last 5 messages for context
       .forEach(msg => {
         messages.push({
           role: msg.role,
@@ -312,7 +322,6 @@ Current user language: ${context.userPreferences?.language || 'id'}`,
         const response = await this.client.chat.completions.create(params);
         // Ensure we always return a ChatCompletion, not a stream
         if ('choices' in response) {
-          console.dir(response,{depth:null,colors:true})
           return response as OpenAI.Chat.Completions.ChatCompletion;
         }
         // If a stream is returned unexpectedly, throw an error
