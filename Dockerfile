@@ -4,7 +4,7 @@ FROM oven/bun:1 AS base
 # Prisma's library engine requires OpenSSL 3 (libssl.so.3)
 # Install minimal runtime libraries for Debian-based Bun image
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libssl3 ca-certificates \
+  && apt-get install -y --no-install-recommends libssl3 openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
