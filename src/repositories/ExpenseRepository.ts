@@ -91,12 +91,12 @@ export class ExpenseRepository extends BaseRepository<IExpense, Omit<IExpense, '
 
   async create(expenseData: Omit<IExpense, 'id' | 'createdAt' | 'updatedAt'>): Promise<IExpense> {
     try {
-      this.validateRequiredFields(expenseData, ['userId', 'amount', 'description', 'categoryId']);
+      this.validateRequiredFields(expenseData, ['userId', 'expenseId', 'amount', 'description', 'categoryId']);
 
       const expense = await this.prisma.expense.create({
         data: {
           userId: expenseData.userId,
-          expenseId: (expenseData as any).expenseId,
+          expenseId: expenseData.expenseId,
           amount: expenseData.amount,
           description: expenseData.description,
           categoryId: expenseData.categoryId,

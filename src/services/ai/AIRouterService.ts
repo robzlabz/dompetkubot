@@ -264,7 +264,7 @@ export class AIRouterService {
     let response = `✅ berhasil tercatat!\n`;
     response += `id transaksi: \`${transactionId}\``;
     if (categoryName) {
-      response += `\nkategori: ${categoryName} (di generate dari ai dan di catat di sistem)`;
+      response += `\nkategori: ${categoryName}`;
     }
 
     response += `\n\n`;
