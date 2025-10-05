@@ -8,6 +8,7 @@ import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateCOnversation } from "./services/ConversationService";
 import { MessageType } from "@prisma/client";
 import logger from "./services/logger";
+import { formatRupiah } from "./utils/money";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -115,6 +116,7 @@ bot.command("start", (ctx: any) => {
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
           messages.push(assistantMsg);
+          let summaryText: string | null = null;
 
           for (const toolCall of assistantMsg.tool_calls) {
             const name = toolCall.function?.name;
@@ -129,20 +131,40 @@ bot.command("start", (ctx: any) => {
               continue;
             }
 
-            let result: unknown;
+            let result: any;
             try {
               if (name === "create_expense") {
                 lastToolUsed = "create_expense";
                 result = await createExpense({ ...argsObj, telegramId: chatId } as any);
+                if (result?.ok) {
+                  const expenseId = result.expenseId;
+                  const amount = Number(result.amount || 0);
+                  const comment = String((argsObj as any).description || "");
+                  summaryText = `✅ berhasil di catat\ntransaksi: ${expenseId}\n\ntotal keluar ${formatRupiah(amount)}\n\n${comment}`.trim();
+                }
               } else if (name === "read_expense") {
                 lastToolUsed = "read_expense";
                 result = await readExpense({ ...argsObj, telegramId: chatId } as any);
               } else if (name === "update_expense") {
                 lastToolUsed = "update_expense";
                 result = await updateExpense(argsObj as any);
+                if (result?.ok) {
+                  const expenseId = String(result.expenseId);
+                  const updated = await prisma.expense.findUnique({ where: { expenseId } });
+                  const amount = Number(updated?.amount || 0);
+                  const comment = String(updated?.description || "");
+                  summaryText = `✅ berhasil di edit\ntransaksi: ${expenseId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
+                }
               } else if (name === "delete_expense") {
                 lastToolUsed = "delete_expense";
+                const expenseId = String((argsObj as any).expenseId || "");
+                const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId } }) : null;
                 result = await deleteExpense(argsObj as any);
+                if (result?.ok) {
+                  const comment = String(existing?.description || "");
+                  // Untuk hapus, tampilkan total diubah Rp. 0
+                  summaryText = `✅ berhasil di hapus\ntransaksi: ${result.expenseId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
+                }
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
               }
@@ -155,6 +177,19 @@ bot.command("start", (ctx: any) => {
             }
 
             messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
+          }
+
+          // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
+          if (summaryText) {
+            await updateCOnversation({
+              id: conv.id,
+              response: summaryText,
+              toolUsed: lastToolUsed ?? null,
+              tokensIn,
+              tokensOut,
+            });
+            logger.info({ chatId, response: summaryText }, "Tool summary response sent");
+            return ctx.send(summaryText);
           }
 
           // lanjut ke iterasi berikutnya
