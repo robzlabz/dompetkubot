@@ -3,6 +3,7 @@ import { openai, transcribeFromBuffer } from "./services/openai";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { memoryTools } from "./tools/memory";
+import { finalTools } from "./tools/final";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
 import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory } from "./services/MemoryService";
@@ -12,6 +13,7 @@ import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { formatRupiah, toNumber } from "./utils/money";
 import { formatFriendlyExpenseMessage } from "./utils/friendlyMessage";
+import { getRandomThinkingMessage, getToolProgressText, getToolDoneText } from "./utils/thinkingTemplates";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -35,9 +37,11 @@ Tugasmu:
    - save_memory: simpan atau perbarui preset item (key, price, unit).
    - get_memory: ambil preset item berdasarkan key.
  - delete_memory: hapus preset item berdasarkan key.
+ - Gunakan tool call untuk mengirim pesan final:
+   - send_final_message: kirim pesan final ke user dan akhiri alur. Field: text (string). Tool ini HARUS dipanggil di langkah TERAKHIR bila kamu ingin menutup jawaban melalui tool.
  - Catatan: Kamu boleh menggunakan beberapa tool call secara berurutan (multi-step) dalam satu percakapan untuk menyelesaikan tugas.
    Contoh:
-   - get_memory("ayam") → konversi unit dan hitung total → create_expense
+   - get_memory → cek unit dan hitung total → create_expense
    - read_expense → update_expense (edit transaksi yang baru)
    - save_memory → create_expense_many (pakai preset harga untuk beberapa item)
  - Gunakan tool call untuk melakukan CRUD income bila diperlukan:
@@ -57,10 +61,10 @@ if (!OPENAI_API_KEY) {
 }
 
 bot.command("start", (ctx: any) => {
-    return ctx.send(
-      "Halo! Aku Dompetku Bot. Kirim teks pembelian seperti: 'beli ayam 5kg, perkilonya 10rb' atau '3x5000' dan aku hitung totalnya."
-    );
-  })
+  return ctx.send(
+    "Halo! Aku Dompetku Bot. Kirim teks pembelian seperti: 'beli ayam 5kg, perkilonya 10rb' atau '3x5000' dan aku hitung totalnya."
+  );
+})
   .onStart(({ info }) => {
     console.log(`✨ Bot @${info.username} telah berjalan.`);
   })
@@ -92,6 +96,11 @@ bot.command("start", (ctx: any) => {
     logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
 
     ctx.sendChatAction("typing");
+
+    // Kirim placeholder "berpikir" agar user tahu bot sedang proses
+    const thinkingText = getRandomThinkingMessage();
+    const thinkingMsg = await ctx.send(thinkingText);
+    
 
     const chatId = String(ctx.chat.id);
 
@@ -138,7 +147,7 @@ bot.command("start", (ctx: any) => {
       try {
         const completion = await openai.chat.completions.create({
           model: OPENAI_MODEL,
-          tools: [...expenseTools, ...incomeTools, ...memoryTools] as any,
+          tools: [...expenseTools, ...incomeTools, ...memoryTools, ...finalTools] as any,
           messages,
         });
 
@@ -154,6 +163,7 @@ bot.command("start", (ctx: any) => {
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
           messages.push(assistantMsg);
           let summaryText: string | null = null;
+          let lastToolUsed: string | null = null;
 
           for (const toolCall of assistantMsg.tool_calls) {
             const name = toolCall.function?.name;
@@ -170,6 +180,12 @@ bot.command("start", (ctx: any) => {
 
             let result: any;
             try {
+              // Update pesan placeholder agar user tahu tool yang sedang dipakai
+              try {
+                await ctx.editMessageText(getToolProgressText(name), { message_id: thinkingMsg.id });
+              } catch (e: any) {
+                logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (progress)");
+              }
               if (name === "create_expense") {
                 lastToolUsed = "create_expense";
                 result = await createExpense({ ...argsObj, telegramId: chatId } as any);
@@ -274,6 +290,11 @@ bot.command("start", (ctx: any) => {
                   const comment = String(existing?.description || "");
                   summaryText = `✅ berhasil di hapus\npemasukan: ${result.incomeId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
                 }
+              } else if (name === "send_final_message") {
+                lastToolUsed = "send_final_message";
+                const text = String((argsObj as any).text || "");
+                result = { ok: true };
+                summaryText = text || "";
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
               }
@@ -304,27 +325,35 @@ bot.command("start", (ctx: any) => {
             }
           }
 
-          // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
-          if (summaryText) {
-            await updateConversation({
-              id: conv.id,
-              toolUsed: lastToolUsed ?? null,
-              tokensIn,
-              tokensOut,
-            });
-            await createConversation({
-              userId: user.id,
-              message: summaryText,
-              role: MessageRole.ASSISTANT,
-              messageType: MessageType.TEXT,
-              toolUsed: lastToolUsed ?? null,
-              coinsUsed: null,
-              tokensIn: null,
-              tokensOut: null,
-            });
-            logger.info({ chatId, response: summaryText }, "Tool summary response sent");
-            return ctx.send(summaryText, { parse_mode: "Markdown" });
-          }
+          // // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
+          // if (summaryText) {
+          //   // Update placeholder jadi selesai
+
+          //   try {
+          //     await ctx.editMessageText(getToolDoneText(lastToolUsed || "AI POPO"));
+          //   } catch (e: any) {
+          //     logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (done)");
+          //   }
+
+          //   await updateConversation({
+          //     id: conv.id,
+          //     toolUsed: lastToolUsed ?? null,
+          //     tokensIn,
+          //     tokensOut,
+          //   });
+          //   await createConversation({
+          //     userId: user.id,
+          //     message: summaryText,
+          //     role: MessageRole.ASSISTANT,
+          //     messageType: MessageType.TEXT,
+          //     toolUsed: lastToolUsed ?? null,
+          //     coinsUsed: null,
+          //     tokensIn: null,
+          //     tokensOut: null,
+          //   });
+          //   logger.info({ chatId, response: summaryText }, "Tool summary response sent");
+          //   return ctx.send(summaryText, { parse_mode: "Markdown" });
+          // }
 
           // lanjut ke iterasi berikutnya
           continue;
@@ -332,6 +361,11 @@ bot.command("start", (ctx: any) => {
 
         // Tidak ada tool call, anggap ini respons final untuk user
         const finalText = assistantMsg.content ?? "Maaf, aku belum bisa memahami.";
+        try {
+          await ctx.editMessageText(getToolDoneText(lastToolUsed || "ini dia hasilnya...."),{ message_id: thinkingMsg.id });
+        } catch (e: any) {
+          logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (final)");
+        }
         await updateConversation({
           id: conv.id,
           toolUsed: lastToolUsed ?? null,
@@ -352,7 +386,7 @@ bot.command("start", (ctx: any) => {
         // Chat logging: log AI final response
         logger.info({ chatId, response: finalText, tokensIn, tokensOut }, "AI response sent");
 
-        return ctx.send(finalText, { parse_mode: "Markdown" });
+        return ctx.editMessageText(finalText, { parse_mode: "Markdown", message_id: thinkingMsg.id });
       } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
         await updateConversation({
