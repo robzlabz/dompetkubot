@@ -455,6 +455,13 @@ Proses ini mungkin memakan waktu beberapa menit.`;
     async handleTextMessage(text: string, context: BotContext): Promise<string> {
         try {
             const userContext = context as BotContext & { telegramId: string };
+            const normalized = text.toLowerCase().trim();
+
+            // Quick greeting detection to avoid unintended expense creation
+            const isGreeting = /^(hi|hai|halo|hello|yo|ping|test|selamat\s(pagi|siang|sore|malam))$/.test(normalized);
+            if (isGreeting) {
+                return '👋 Hai! Bot online. Ada yang bisa dibantu?\n\nContoh: "beli kopi 25rb" atau ketik /help.';
+            }
             
             // Handle privacy-related confirmations
             if (text.trim().toUpperCase() === 'HAPUS SEMUA DATA') {

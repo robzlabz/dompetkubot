@@ -67,6 +67,27 @@ export class AIRouterService {
           // Parse tool parameters
           const parameters = JSON.parse(toolCall?.function.arguments || '{}');
 
+          // Guard: prevent accidental expense creation for messages without amounts
+          if (toolCall?.function?.name === 'create_expense') {
+            const hasAmountParam = typeof parameters?.amount === 'number' && parameters.amount > 0;
+            const containsNumericHint = /(?:\d|rp\.?|idr|rb|ribu|jt|juta|k)/i.test(message);
+            if (!hasAmountParam && !containsNumericHint) {
+              const guardedResponse = this.getFallbackResponse(message);
+              await this.storeConversation(
+                userId,
+                guardedResponse,
+                'assistant',
+                aiResponse.usage?.promptTokens,
+                aiResponse.usage?.completionTokens
+              );
+              return {
+                response: guardedResponse,
+                requiresToolExecution: false,
+                metadata: { confidence: 0.5 },
+              };
+            }
+          }
+
           // Execute the tool
           const toolResult = await this.toolRegistry.executeTool(
             toolCall?.function.name || '',
