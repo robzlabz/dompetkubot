@@ -72,6 +72,18 @@ export class TelegramBotService implements MessageHandler {
         this.setupHandlers();
     }
 
+    private getRandomProcessingMessage(): string {
+        const messages = [
+            '⏳ Sedang diproses…',
+            '🧠 Lagi mikir bentar…',
+            '🔎 Tunggu ya, aku cek dulu…',
+            '⚙️ Memproses pesan kamu…',
+            '📝 Sebentar, menyiapkan jawaban…',
+            '🤖 Lagi kerja, mohon tunggu…'
+        ];
+        return messages[Math.floor(Math.random() * messages.length)] || 'sek sek...';
+    }
+
     private setupMiddleware(): void {
         // Logging middleware
         this.bot.use((ctx, next) => {
@@ -337,45 +349,104 @@ Proses ini mungkin memakan waktu beberapa menit.`;
             }
         });
 
-        // Text message handler
+        // Text message handler with instant feedback
         this.bot.on('message', async (ctx) => {
             if (ctx.update?.message?.text) {
                 const context = (ctx as any).userContext as BotContext;
+                const chatId = ctx.update.message.chat.id;
+
+                // Send processing message
+                const pending = await this.bot.api.sendMessage({
+                    chat_id: chatId,
+                    text: this.getRandomProcessingMessage(),
+                    parse_mode: 'Markdown'
+                });
+
+                // Compute final response
                 const response = await this.handleTextMessage(ctx.update.message.text, context);
-                await this.bot.api.sendMessage({
-                    chat_id: ctx.update.message.chat.id,
-                    text: response,
-                    parse_mode: 'Markdown'
-                });
-            }
-        });
 
-        // Voice message handler
-        this.bot.on('message', async (ctx) => {
-            if (ctx.update?.message?.voice) {
-                const context = (ctx as any).userContext as BotContext;
-                const response = await this.handleVoiceMessage(ctx.update.message.voice.file_id, context);
-                await this.bot.api.sendMessage({
-                    chat_id: ctx.update.message.chat.id,
-                    text: response,
-                    parse_mode: 'Markdown'
-                });
-            }
-        });
-
-        // Photo message handler
-        this.bot.on('message', async (ctx) => {
-            if (ctx.update?.message?.photo) {
-                const context = (ctx as any).userContext as BotContext;
-                const photos = ctx.update.message.photo;
-                const largestPhoto = photos[photos.length - 1]; // Get the largest photo
-                if (largestPhoto) {
-                    const response = await this.handlePhotoMessage(largestPhoto.file_id, context);
-                    await this.bot.api.sendMessage({
-                        chat_id: ctx.update.message.chat.id,
+                // Try to replace processing message with final response
+                try {
+                    await this.bot.api.editMessageText({
+                        chat_id: chatId,
+                        message_id: (pending as any).message_id,
                         text: response,
                         parse_mode: 'Markdown'
                     });
+                } catch (err) {
+                    // Fallback: send a new message if edit fails
+                    await this.bot.api.sendMessage({
+                        chat_id: chatId,
+                        text: response,
+                        parse_mode: 'Markdown'
+                    });
+                }
+            }
+        });
+
+        // Voice message handler with instant feedback
+        this.bot.on('message', async (ctx) => {
+            if (ctx.update?.message?.voice) {
+                const context = (ctx as any).userContext as BotContext;
+                const chatId = ctx.update.message.chat.id;
+
+                // Send processing message
+                const pending = await this.bot.api.sendMessage({
+                    chat_id: chatId,
+                    text: this.getRandomProcessingMessage(),
+                    parse_mode: 'Markdown'
+                });
+
+                const response = await this.handleVoiceMessage(ctx.update.message.voice.file_id, context);
+
+                try {
+                    await this.bot.api.editMessageText({
+                        chat_id: chatId,
+                        message_id: (pending as any).message_id,
+                        text: response,
+                        parse_mode: 'Markdown'
+                    });
+                } catch (err) {
+                    await this.bot.api.sendMessage({
+                        chat_id: chatId,
+                        text: response,
+                        parse_mode: 'Markdown'
+                    });
+                }
+            }
+        });
+
+        // Photo message handler with instant feedback
+        this.bot.on('message', async (ctx) => {
+            if (ctx.update?.message?.photo) {
+                const context = (ctx as any).userContext as BotContext;
+                const chatId = ctx.update.message.chat.id;
+                const photos = ctx.update.message.photo;
+                const largestPhoto = photos[photos.length - 1]; // Get the largest photo
+                if (largestPhoto) {
+                    // Send processing message
+                    const pending = await this.bot.api.sendMessage({
+                        chat_id: chatId,
+                        text: this.getRandomProcessingMessage(),
+                        parse_mode: 'Markdown'
+                    });
+
+                    const response = await this.handlePhotoMessage(largestPhoto.file_id, context);
+
+                    try {
+                        await this.bot.api.editMessageText({
+                            chat_id: chatId,
+                            message_id: (pending as any).message_id,
+                            text: response,
+                            parse_mode: 'Markdown'
+                        });
+                    } catch (err) {
+                        await this.bot.api.sendMessage({
+                            chat_id: chatId,
+                            text: response,
+                            parse_mode: 'Markdown'
+                        });
+                    }
                 }
             }
         });
