@@ -1,518 +1,176 @@
-import { z } from 'zod';
-import { IExpenseService } from '../interfaces/services.js';
-import { nanoid } from 'nanoid';
-import { IExpense, IExpenseItem } from '../interfaces/index.js';
-import { IExpenseRepository, ICategoryRepository } from '../interfaces/repositories.js';
-import { CalculationService, CalculationResult } from './CalculationService.js';
+import { prisma } from "./prisma";
+import { nanoid } from "nanoid";
+import { toNumber } from "../utils/money";
+import type { Prisma, User, Expense, ExpenseItem, Category } from "@prisma/client";
 
-// Validation schemas
-const CreateExpenseSchema = z.object({
-  userId: z.string().min(1, 'User ID is required'),
-  amount: z.number().positive('Amount must be positive'),
-  description: z.string().min(1, 'Description is required'),
-  categoryId: z.string().min(1, 'Category ID is required'),
-  calculationExpression: z.string().optional(),
-  receiptImageUrl: z.string().url().optional(),
-  items: z.array(z.object({
-    name: z.string().min(1, 'Item name is required'),
-    quantity: z.number().positive('Quantity must be positive'),
-    unitPrice: z.number().positive('Unit price must be positive')
-  })).optional()
-});
+// Define explicit argument and return types to avoid any
+type ExpenseItemArg = {
+  name: string;
+  quantity: number | string;
+  unitPrice: number | string;
+};
 
-const UpdateExpenseSchema = z.object({
-  amount: z.number().positive().optional(),
-  description: z.string().min(1).optional(),
-  categoryId: z.string().min(1).optional(),
-  calculationExpression: z.string().optional(),
-  receiptImageUrl: z.string().url().optional(),
-  items: z.array(z.object({
-    name: z.string().min(1),
-    quantity: z.number().positive(),
-    unitPrice: z.number().positive()
-  })).optional()
-});
+type CreateExpenseArgs = {
+  telegramId: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  amount?: number | string | null;
+  description?: string | null;
+  items?: ExpenseItemArg[];
+};
 
-export interface CreateExpenseData {
-  userId: string;
-  amount: number;
-  description: string;
-  categoryId: string;
-  calculationExpression?: string;
-  receiptImageUrl?: string;
-  items?: Array<{
-    name: string;
-    quantity: number;
-    unitPrice: number;
-  }>;
+type ReadExpenseArgs = {
+  expenseId?: string | null;
+  telegramId?: string | null;
+  limit?: number | null;
+};
+
+type UpdateExpenseArgs = {
+  expenseId: string;
+  description?: string | null;
+  amount?: number | string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  items?: ExpenseItemArg[];
+};
+
+type DeleteExpenseArgs = {
+  expenseId: string;
+};
+
+type ExpenseWithRelations = Expense & { items: ExpenseItem[]; category: Category; user?: User };
+
+type ServiceOk<T> = { ok: true } & T;
+
+type ServiceErr = { ok: false; error: string };
+
+// Helper: get or create user by telegramId
+async function getOrCreateUserByTelegramId(telegramId: string): Promise<User> {
+  const existing = await prisma.user.findUnique({ where: { telegramId } });
+  if (existing) return existing;
+  return prisma.user.create({ data: { telegramId, language: "id" } });
 }
 
-export interface ExpenseFilters {
-  categoryId?: string;
-  startDate?: Date;
-  endDate?: Date;
-  minAmount?: number;
-  maxAmount?: number;
-  hasItems?: boolean;
+// Helper: resolve category by id or name; create if not exists
+async function resolveCategory({ userId, categoryId, categoryName }: { userId: string; categoryId?: string | null; categoryName?: string | null; }): Promise<Category> {
+  if (categoryId) {
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (cat) return cat;
+  }
+  const name = (categoryName || "Lainnya").trim();
+  const existing = await prisma.category.findFirst({ where: { userId, name } });
+  if (existing) return existing as Category;
+  return prisma.category.create({ data: { userId, name, type: "EXPENSE" } });
 }
 
-export class ExpenseService implements IExpenseService {
-  constructor(
-    private expenseRepository: IExpenseRepository,
-    private categoryRepository: ICategoryRepository,
-    private calculationService: CalculationService
-  ) {}
+export async function createExpense(args: CreateExpenseArgs): Promise<ServiceOk<{ expenseId: string; amount: number; itemsCount: number }> | ServiceErr> {
+  const telegramId: string = String(args.telegramId);
+  const user = await getOrCreateUserByTelegramId(telegramId);
+  const category = await resolveCategory({ userId: user.id, categoryId: args.categoryId ?? null, categoryName: args.categoryName ?? null });
 
-  /**
-   * Create a new expense with automatic calculation support
-   */
-  async createExpense(userId: string, expenseData: CreateExpenseData): Promise<IExpense> {
-    try {
-      // Validate input data
-      // Include function argument userId in validation to satisfy schema
-      const validatedData = CreateExpenseSchema.parse({ ...expenseData, userId });
-      
-      // Verify user has access to the category
-      const category = await this.categoryRepository.findById(validatedData.categoryId);
-      if (!category) {
-        throw new Error('Category not found');
-      }
-      
-      // Verify category belongs to user or is default
-      if (category.userId && category.userId !== userId) {
-        throw new Error('Category not accessible to user');
-      }
-      
-      // Verify category is for expenses
-      if (category.type !== 'EXPENSE') {
-        throw new Error('Category must be of type EXPENSE');
-      }
+  const amountNum = toNumber(args.amount);
+  let itemsInput: Array<{ name: string; quantity: number; unitPrice: number }> = [];
+  if (Array.isArray(args.items)) {
+    itemsInput = args.items
+      .map((it: ExpenseItemArg) => {
+        const qty = toNumber(it.quantity);
+        const unit = toNumber(it.unitPrice);
+        return { name: String(it.name), quantity: Math.max(0, Math.floor(qty ?? 0)), unitPrice: Math.max(0, unit ?? 0) };
+      })
+      .filter((it: { name: string; quantity: number; unitPrice: number }) => it.name && it.quantity > 0 && it.unitPrice >= 0);
+  }
 
-      let finalAmount = validatedData.amount;
-      let calculationResult: CalculationResult | null = null;
-      let processedItems: IExpenseItem[] | undefined;
+  const calculatedTotal = itemsInput.length > 0 ? itemsInput.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0) : null;
+  const finalAmount = amountNum ?? calculatedTotal ?? 0;
 
-      // If calculation expression is provided, calculate the amount
-      if (validatedData.calculationExpression) {
-        calculationResult = await this.calculationService.calculateExpression(validatedData.calculationExpression);
-        finalAmount = calculationResult.result;
-        
-        // Convert calculation items to expense items if available
-        if (calculationResult.items) {
-          processedItems = calculationResult.items.map((item, index) => ({
-            id: '', // Will be set by database
-            expenseId: '', // Will be set by database
-            name: item.description || `Item ${index + 1}`,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.total
-          }));
-        }
-      }
-
-      // If items are provided directly, process them
-      if (validatedData.items && validatedData.items.length > 0) {
-        processedItems = validatedData.items.map((item, index) => ({
-          id: '', // Will be set by database
-          expenseId: '', // Will be set by database
-          name: item.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.quantity * item.unitPrice
-        }));
-        
-        // Recalculate total amount from items if no calculation expression
-        if (!validatedData.calculationExpression) {
-          finalAmount = processedItems.reduce((sum, item) => sum + item.totalPrice, 0);
-        }
-      }
-
-      // Create the expense
-      const expenseToCreate = {
-        userId,
-        expenseId: nanoid(8),
+  const expenseId = nanoid(10);
+  const expense = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const created = await tx.expense.create({
+      data: {
+        expenseId,
+        userId: user.id,
         amount: finalAmount,
-        description: validatedData.description,
-        categoryId: validatedData.categoryId,
-        calculationExpression: validatedData.calculationExpression,
-        receiptImageUrl: validatedData.receiptImageUrl,
-        items: processedItems
-      };
+        description: String(args.description ?? ""),
+        categoryId: category.id,
+        calculationExpression: itemsInput.length > 0 ? itemsInput.map((it) => `${it.quantity}x${it.unitPrice}`).join(" + ") : undefined,
+      },
+    });
 
-      return await this.expenseRepository.create(expenseToCreate);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new Error(`Validation error: ${error.errors.map(e => e.message).join(', ')}`);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Create expense from natural language text with calculation
-   */
-  async createExpenseFromText(userId: string, text: string, categoryId?: string): Promise<IExpense> {
-    try {
-      // Try to parse quantity and price from text
-      const parsedData = await this.calculationService.parseQuantityAndPrice(text);
-      
-      let amount: number;
-      let calculationExpression: string | undefined;
-      let items: Array<{ name: string; quantity: number; unitPrice: number; }> | undefined;
-      
-      if (parsedData) {
-        amount = parsedData.totalPrice;
-        calculationExpression = text;
-        items = [{
-          name: parsedData.item || 'Item',
-          quantity: parsedData.quantity,
-          unitPrice: parsedData.unitPrice
-        }];
-      } else {
-        // Try to extract numbers and calculate
-        const numbers = this.calculationService.extractNumbers(text);
-        if (numbers.length === 0) {
-          throw new Error('No valid amount found in text');
-        }
-        
-        if (this.calculationService.isValidExpression(text)) {
-          const result = await this.calculationService.calculateExpression(text);
-          amount = result.result;
-          calculationExpression = text;
-        } else {
-          // Use the largest number as amount
-          amount = Math.max(...numbers);
-        }
-      }
-
-      // Use provided category or try to find a default expense category
-      let finalCategoryId = categoryId;
-      if (!finalCategoryId) {
-        const defaultCategories = await this.categoryRepository.findByType('EXPENSE', userId);
-        const generalCategory = defaultCategories.find(cat => 
-          cat.name.toLowerCase().includes('umum') || 
-          cat.name.toLowerCase().includes('lain') ||
-          cat.name.toLowerCase().includes('general')
-        );
-        
-        if (generalCategory) {
-          finalCategoryId = generalCategory.id;
-        } else if (defaultCategories.length > 0) {
-          finalCategoryId = defaultCategories[0].id;
-        } else {
-          throw new Error('No expense category available');
-        }
-      }
-
-      return await this.createExpense(userId, {
-        userId,
-        amount,
-        description: text,
-        categoryId: finalCategoryId,
-        calculationExpression,
-        items
+    if (itemsInput.length > 0) {
+      await tx.expenseItem.createMany({
+        data: itemsInput.map((it) => ({ expenseId: created.id, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, totalPrice: it.quantity * it.unitPrice })),
       });
-    } catch (error) {
-      throw new Error(`Failed to create expense from text "${text}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    return created;
+  });
+
+  return { ok: true, expenseId, amount: finalAmount, itemsCount: itemsInput.length };
+}
+
+export async function readExpense(args: ReadExpenseArgs): Promise<ServiceOk<{ data: ExpenseWithRelations | ExpenseWithRelations[] | null }> | ServiceErr> {
+  if (args.expenseId) {
+    const e = await prisma.expense.findUnique({ where: { expenseId: String(args.expenseId) }, include: { items: true, category: true, user: true } });
+    return { ok: true, data: e as ExpenseWithRelations | null };
+  }
+  const telegramId: string | null = args.telegramId ? String(args.telegramId) : null;
+  const limit: number = typeof args.limit === "number" && args.limit > 0 ? args.limit : 10;
+  if (!telegramId) return { ok: false, error: "Missing telegramId for listing." };
+  const user = await getOrCreateUserByTelegramId(telegramId);
+  const list = await prisma.expense.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: limit, include: { items: true, category: true } });
+  return { ok: true, data: list as ExpenseWithRelations[] };
+}
+
+export async function updateExpense(args: UpdateExpenseArgs): Promise<ServiceOk<{ expenseId: string }> | ServiceErr> {
+  const expenseId: string = String(args.expenseId);
+  const existing = await prisma.expense.findUnique({ where: { expenseId } });
+  if (!existing) return { ok: false, error: "Expense not found" };
+
+  const updateData: Partial<Pick<Expense, "description" | "amount" | "categoryId">> = {};
+  if (args.description !== undefined && args.description !== null) updateData.description = String(args.description);
+  if (args.amount !== undefined && args.amount !== null) {
+    const num = toNumber(args.amount);
+    if (num !== null) updateData.amount = num;
+  }
+
+  if (args.categoryId || args.categoryName) {
+    const user = await prisma.user.findUnique({ where: { id: existing.userId } });
+    if (user) {
+      const category = await resolveCategory({ userId: user.id, categoryId: args.categoryId ?? null, categoryName: args.categoryName ?? null });
+      updateData.categoryId = category.id;
     }
   }
 
-  /**
-   * Get user expenses with optional filters
-   */
-  async getUserExpenses(userId: string, limit?: number, offset?: number): Promise<IExpense[]> {
-    try {
-      return await this.expenseRepository.findByUserId(userId, limit, offset);
-    } catch (error) {
-      throw new Error(`Failed to get expenses for user ${userId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const u = await tx.expense.update({ where: { expenseId }, data: updateData });
+
+    if (Array.isArray(args.items)) {
+      await tx.expenseItem.deleteMany({ where: { expenseId: u.id } });
+      const itemsInput: { name: string; quantity: number; unitPrice: number }[] = args.items
+        .map((it: ExpenseItemArg) => {
+          const qty = toNumber(it.quantity);
+          const unit = toNumber(it.unitPrice);
+          return { name: String(it.name), quantity: Math.max(0, Math.floor(qty ?? 0)), unitPrice: Math.max(0, unit ?? 0) };
+        })
+        .filter((it: { name: string; quantity: number; unitPrice: number }) => it.name && it.quantity > 0 && it.unitPrice >= 0);
+
+      if (itemsInput.length > 0) {
+        await tx.expenseItem.createMany({ data: itemsInput.map((it) => ({ expenseId: u.id, name: it.name, quantity: it.quantity, unitPrice: it.unitPrice, totalPrice: it.quantity * it.unitPrice })) });
+        const newTotal = itemsInput.reduce((acc: number, it) => acc + it.quantity * it.unitPrice, 0);
+        await tx.expense.update({ where: { id: u.id }, data: { amount: updateData.amount ?? newTotal, calculationExpression: itemsInput.map((it) => `${it.quantity}x${it.unitPrice}`).join(" + ") } });
+      }
     }
-  }
 
-  /**
-   * Get expenses by date range
-   */
-  async getExpensesByDateRange(userId: string, startDate: Date, endDate: Date): Promise<IExpense[]> {
-    try {
-      return await this.expenseRepository.findByUserIdAndDateRange(userId, startDate, endDate);
-    } catch (error) {
-      throw new Error(`Failed to get expenses by date range: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+    return u;
+  });
 
-  /**
-   * Update an existing expense
-   */
-  async updateExpense(expenseId: string, userId: string, updates: Partial<IExpense>): Promise<IExpense> {
-    try {
-      // Validate update data
-      const validatedUpdates = UpdateExpenseSchema.parse(updates);
-      
-      // Verify expense exists and belongs to user
-      console.log({expenseId});
-      let existingExpense = await this.expenseRepository.findById(expenseId);
-      if (!existingExpense) {
-        existingExpense = await this.expenseRepository.findByExpenseId(expenseId);
-      }
-      if (!existingExpense) {
-        throw new Error('Expense not found');
-      }
-      
-      if (existingExpense.userId !== userId) {
-        throw new Error('Expense does not belong to user');
-      }
+  return { ok: true, expenseId };
+}
 
-      // If category is being updated, verify it
-      if (validatedUpdates.categoryId) {
-        const category = await this.categoryRepository.findById(validatedUpdates.categoryId);
-        if (!category) {
-          throw new Error('Category not found');
-        }
-        
-        if (category.userId && category.userId !== userId) {
-          throw new Error('Category not accessible to user');
-        }
-        
-        if (category.type !== 'EXPENSE') {
-          throw new Error('Category must be of type EXPENSE');
-        }
-      }
-
-      // Handle calculation expression updates
-      let finalUpdates = { ...validatedUpdates };
-      if (validatedUpdates.calculationExpression) {
-        const calculationResult = await this.calculationService.calculateExpression(validatedUpdates.calculationExpression);
-        finalUpdates.amount = calculationResult.result;
-        
-        // Update items if calculation provides them
-        if (calculationResult.items) {
-          finalUpdates.items = calculationResult.items.map((item, index) => ({
-            id: '', // Will be handled by repository
-            expenseId: expenseId,
-            name: item.description || `Item ${index + 1}`,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.total
-          }));
-        }
-      }
-
-      // If items are updated, recalculate amount
-      if (finalUpdates.items && finalUpdates.items.length > 0 && !validatedUpdates.calculationExpression) {
-        const itemsWithTotal = finalUpdates.items.map(item => ({
-          ...item,
-          totalPrice: item.quantity * item.unitPrice
-        }));
-        finalUpdates.amount = itemsWithTotal.reduce((sum, item) => sum + item.totalPrice, 0);
-        finalUpdates.items = itemsWithTotal;
-      }
-
-      return await this.expenseRepository.update(existingExpense.id, finalUpdates);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new Error(`Validation error: ${error.errors.map(e => e.message).join(', ')}`);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Delete an expense
-   */
-  async deleteExpense(expenseId: string, userId: string): Promise<void> {
-    try {
-      // Verify expense exists and belongs to user
-      const existingExpense = await this.expenseRepository.findById(expenseId);
-      if (!existingExpense) {
-        throw new Error('Expense not found');
-      }
-      
-      if (existingExpense.userId !== userId) {
-        throw new Error('Expense does not belong to user');
-      }
-
-      await this.expenseRepository.delete(expenseId);
-    } catch (error) {
-      throw new Error(`Failed to delete expense: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get total expenses for a period
-   */
-  async getTotalExpensesByPeriod(userId: string, startDate: Date, endDate: Date): Promise<number> {
-    try {
-      return await this.expenseRepository.getTotalByUserIdAndPeriod(userId, startDate, endDate);
-    } catch (error) {
-      throw new Error(`Failed to get total expenses: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get expenses with advanced filtering
-   */
-  async getExpensesWithFilters(userId: string, filters: ExpenseFilters): Promise<IExpense[]> {
-    try {
-      const queryFilters: any = { userId };
-
-      if (filters.categoryId) {
-        queryFilters.categoryId = filters.categoryId;
-      }
-
-      if (filters.startDate || filters.endDate) {
-        queryFilters.createdAt = {};
-        if (filters.startDate) {
-          queryFilters.createdAt.gte = filters.startDate;
-        }
-        if (filters.endDate) {
-          queryFilters.createdAt.lte = filters.endDate;
-        }
-      }
-
-      if (filters.minAmount || filters.maxAmount) {
-        queryFilters.amount = {};
-        if (filters.minAmount) {
-          queryFilters.amount.gte = filters.minAmount;
-        }
-        if (filters.maxAmount) {
-          queryFilters.amount.lte = filters.maxAmount;
-        }
-      }
-
-      if (filters.hasItems !== undefined) {
-        if (filters.hasItems) {
-          queryFilters.items = { some: {} };
-        } else {
-          queryFilters.items = { none: {} };
-        }
-      }
-
-      return await this.expenseRepository.findMany(queryFilters);
-    } catch (error) {
-      throw new Error(`Failed to get expenses with filters: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get recent expenses for a user
-   */
-  async getRecentExpenses(userId: string, limit: number = 10): Promise<IExpense[]> {
-    try {
-      return await this.expenseRepository.findByUserId(userId, limit, 0);
-    } catch (error) {
-      throw new Error(`Failed to get recent expenses: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get expense statistics for a user
-   */
-  async getExpenseStatistics(userId: string, startDate: Date, endDate: Date): Promise<{
-    totalAmount: number;
-    totalCount: number;
-    averageAmount: number;
-    categorySummary: Array<{
-      categoryId: string;
-      categoryName: string;
-      totalAmount: number;
-      count: number;
-    }>;
-  }> {
-    try {
-      const expenses = await this.getExpensesByDateRange(userId, startDate, endDate);
-      
-      const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-      const totalCount = expenses.length;
-      const averageAmount = totalCount > 0 ? totalAmount / totalCount : 0;
-
-      // Group by category
-      const categoryMap = new Map<string, { totalAmount: number; count: number; name: string }>();
-      
-      for (const expense of expenses) {
-        const categoryId = expense.categoryId;
-        const existing = categoryMap.get(categoryId);
-        
-        if (existing) {
-          existing.totalAmount += expense.amount;
-          existing.count += 1;
-        } else {
-          // Get category name
-          const category = await this.categoryRepository.findById(categoryId);
-          categoryMap.set(categoryId, {
-            totalAmount: expense.amount,
-            count: 1,
-            name: category?.name || 'Unknown'
-          });
-        }
-      }
-
-      const categorySummary = Array.from(categoryMap.entries()).map(([categoryId, data]) => ({
-        categoryId,
-        categoryName: data.name,
-        totalAmount: data.totalAmount,
-        count: data.count
-      }));
-
-      return {
-        totalAmount,
-        totalCount,
-        averageAmount,
-        categorySummary
-      };
-    } catch (error) {
-      throw new Error(`Failed to get expense statistics: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Process receipt data into expense
-   */
-  async createExpenseFromReceipt(userId: string, receiptData: {
-    items: Array<{
-      name: string;
-      quantity: number;
-      unitPrice: number;
-      totalPrice: number;
-    }>;
-    total: number;
-    discount?: number;
-    tax?: number;
-    merchantName?: string;
-    receiptImageUrl?: string;
-  }, categoryId?: string): Promise<IExpense> {
-    try {
-      // Use provided category or find a default one
-      let finalCategoryId = categoryId;
-      if (!finalCategoryId) {
-        const defaultCategories = await this.categoryRepository.findByType('EXPENSE', userId);
-        const shoppingCategory = defaultCategories.find(cat => 
-          cat.name.toLowerCase().includes('belanja') || 
-          cat.name.toLowerCase().includes('shopping') ||
-          cat.name.toLowerCase().includes('makanan')
-        );
-        
-        if (shoppingCategory) {
-          finalCategoryId = shoppingCategory.id;
-        } else if (defaultCategories.length > 0) {
-          finalCategoryId = defaultCategories[0].id;
-        } else {
-          throw new Error('No expense category available');
-        }
-      }
-
-      const description = receiptData.merchantName 
-        ? `Belanja di ${receiptData.merchantName}` 
-        : 'Belanja dari struk';
-
-      return await this.createExpense(userId, {
-        userId,
-        amount: receiptData.total,
-        description,
-        categoryId: finalCategoryId,
-        receiptImageUrl: receiptData.receiptImageUrl,
-        items: receiptData.items
-      });
-    } catch (error) {
-      throw new Error(`Failed to create expense from receipt: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+export async function deleteExpense(args: DeleteExpenseArgs): Promise<ServiceOk<{ expenseId: string }> | ServiceErr> {
+  const expenseId: string = String(args.expenseId);
+  const existing = await prisma.expense.findUnique({ where: { expenseId } });
+  if (!existing) return { ok: false, error: "Expense not found" };
+  await prisma.expense.delete({ where: { id: existing.id } });
+  return { ok: true, expenseId };
 }
