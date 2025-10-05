@@ -264,7 +264,14 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
 
     // add time to text
-    text = `${new Date().toLocaleString()} ${text}`;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const ii = String(now.getMinutes()).padStart(2, '0');
+    // Prepend a clear, human-readable timestamp so the LLM knows when the user spoke
+    text = `[${yyyy}-${mm}-${dd} ${hh}:${ii}] ${text}`;
 
 
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
