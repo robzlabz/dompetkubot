@@ -12,8 +12,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "test": "bun test --run",
-    "test:watch": "bun test --watch"
+    "db:reset": "prisma migrate reset --force",
+    "test": "bun test --run"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

@@ -9,6 +9,7 @@ import { createConversation, coversationByUser, updateConversation } from "./ser
 import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { formatRupiah } from "./utils/money";
+import { formatFriendlyExpenseMessage } from "./utils/friendlyMessage";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -165,7 +166,8 @@ bot.command("start", (ctx: any) => {
                   const expenseId = result.expenseId;
                   const amount = Number(result.amount || 0);
                   const comment = String((argsObj as any).description || "");
-                  summaryText = `✅ berhasil di catat\ntransaksi: ${expenseId}\n\ntotal keluar ${formatRupiah(amount)}\n\n${comment}`.trim();
+                  const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
+                  summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
                 }
               } else if (name === "create_expense_many") {
                 lastToolUsed = "create_expense_many";
@@ -174,7 +176,8 @@ bot.command("start", (ctx: any) => {
                   const expenseId = result.expenseId;
                   const amount = Number(result.amount || 0);
                   const comment = String((argsObj as any).description || "");
-                  summaryText = `✅ berhasil di catat\ntransaksi: ${expenseId}\n\ntotal keluar ${formatRupiah(amount)}\n\n${comment}`.trim();
+                  const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
+                  summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
                 }
               } else if (name === "read_expense") {
                 lastToolUsed = "read_expense";
@@ -184,20 +187,19 @@ bot.command("start", (ctx: any) => {
                 result = await updateExpense(argsObj as any);
                 if (result?.ok) {
                   const expenseId = String(result.expenseId);
-                  const updated = await prisma.expense.findUnique({ where: { expenseId } });
+                  const updated = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
                   const amount = Number(updated?.amount || 0);
                   const comment = String(updated?.description || "");
-                  summaryText = `✅ berhasil di edit\ntransaksi: ${expenseId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
+                  summaryText = formatFriendlyExpenseMessage("update", { categoryName: updated?.category?.name, amount, description: comment, date: new Date() });
                 }
               } else if (name === "delete_expense") {
                 lastToolUsed = "delete_expense";
                 const expenseId = String((argsObj as any).expenseId || "");
-                const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId } }) : null;
+                const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } }) : null;
                 result = await deleteExpense(argsObj as any);
                 if (result?.ok) {
                   const comment = String(existing?.description || "");
-                  // Untuk hapus, tampilkan total diubah Rp. 0
-                  summaryText = `✅ berhasil di hapus\ntransaksi: ${result.expenseId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
+                  summaryText = formatFriendlyExpenseMessage("delete", { categoryName: existing?.category?.name, amount: Number(existing?.amount || 0), description: comment, date: existing?.createdAt ?? new Date() });
                 }
               } else if (name === "create_income") {
                 lastToolUsed = "create_income";
