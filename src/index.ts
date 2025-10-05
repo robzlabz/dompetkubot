@@ -1,13 +1,11 @@
-import { nanoid } from "nanoid";
 import { bot } from "./services/telegramBot";
-import { openai, transcribeFromUrl, transcribeFromBuffer } from "./services/openai";
+import { openai, transcribeFromBuffer } from "./services/openai";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
-import { Hooks } from "gramio";
 import { prisma } from "./services/prisma";
-import { createConversation, coversationByUser, updateCOnversation } from "./services/ConversationService";
+import { createConversation, coversationByUser, updateConversation } from "./services/ConversationService";
 import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { formatRupiah } from "./utils/money";
@@ -15,7 +13,6 @@ import { formatRupiah } from "./utils/money";
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 const SYSTEM_PROMPT = `
@@ -265,7 +262,7 @@ bot.command("start", (ctx: any) => {
 
           // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
           if (summaryText) {
-            await updateCOnversation({
+            await updateConversation({
               id: conv.id,
               toolUsed: lastToolUsed ?? null,
               tokensIn,
@@ -282,7 +279,7 @@ bot.command("start", (ctx: any) => {
               tokensOut: null,
             });
             logger.info({ chatId, response: summaryText }, "Tool summary response sent");
-            return ctx.send(summaryText);
+            return ctx.send(summaryText, { parse_mode: "Markdown" });
           }
 
           // lanjut ke iterasi berikutnya
@@ -291,7 +288,7 @@ bot.command("start", (ctx: any) => {
 
         // Tidak ada tool call, anggap ini respons final untuk user
         const finalText = assistantMsg.content ?? "Maaf, aku belum bisa memahami.";
-        await updateCOnversation({
+        await updateConversation({
           id: conv.id,
           toolUsed: lastToolUsed ?? null,
           tokensIn,
@@ -314,7 +311,7 @@ bot.command("start", (ctx: any) => {
         return ctx.send(finalText, { parse_mode: "Markdown" });
       } catch (err: any) {
         // Jika error, update conversation dan kirim pesan gagal
-        await updateCOnversation({
+        await updateConversation({
           id: conv.id,
           toolUsed: lastToolUsed ?? null,
           tokensIn,
@@ -336,7 +333,7 @@ bot.command("start", (ctx: any) => {
     }
 
     // Jika mencapai batas loop tanpa respons final, tutup percakapan dengan pesan default
-    await updateCOnversation({
+    await updateConversation({
       id: conv.id,
       toolUsed: lastToolUsed ?? null,
       tokensIn,

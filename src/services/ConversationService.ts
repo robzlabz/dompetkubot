@@ -56,7 +56,7 @@ export type UpdateConversationArgs = {
 };
 
 // Note: function name intentionally follows user's request spelling: updateCOnversation
-export async function updateCOnversation(args: UpdateConversationArgs): Promise<Conversation> {
+export async function updateConversation(args: UpdateConversationArgs): Promise<Conversation> {
   const updated = await prisma.conversation.update({
     where: { id: args.id },
     data: {
