@@ -1,19 +1,19 @@
 import { bot } from "./services/telegramBot";
 import { openai, transcribeFromBuffer } from "./services/openai";
+import { readReceiptData } from "./services/ReceiptService";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { memoryTools } from "./tools/memory";
 import { finalTools } from "./tools/final";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
-import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory } from "./services/MemoryService";
+import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory, saveMemoryMany } from "./services/MemoryService";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateConversation } from "./services/ConversationService";
 import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
-import { formatRupiah, toNumber } from "./utils/money";
-import { formatFriendlyExpenseMessage } from "./utils/friendlyMessage";
-import { getRandomThinkingMessage, getToolProgressText, getToolDoneText } from "./utils/thinkingTemplates";
+import { toNumber } from "./utils/money";
+import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -45,6 +45,7 @@ Tool call untuk CRUD expense:
 
 Tool call untuk Memory/Preset System:
 - save_memory: simpan atau perbarui preset item (key, price, unit).
+- save_memory_many: simpan atau perbarui banyak preset sekaligus (items: [{key, price, unit}]).
 - get_memory: ambil preset item berdasarkan key.
 - delete_memory: hapus preset item berdasarkan key.
 
@@ -56,21 +57,21 @@ Tool call untuk CRUD income:
 
 Jawab dengan bahasa santai dan mudah dipahami. harus user frienly, cute dan penuh emosional (emoji juga diijinkan)
 contoh balasan
-（｡•̀ᴗ-）✧ Transaksi masuk, bos!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Hari ini : <datetime ISO>\n <detail item transaksi dalam list>\n\n🧾 Dompet udah update, jangan khawatir 😆,
-🍀 Oke, udah aku masukin ya~\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Sekarang : <datetime ISO>\n <detail item transaksi dalam list>\n\nLangkah kecil, keuangan besar! 💪,
-🧃 Catatan baru sudah mendarat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nGas terus kelola finansialmu ✨,
-🎯 Transaksi berhasil dicatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nDompetmu makin transparan! 📊,
-💫 Data baru tersimpan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nSemangat nabung terus yaa! 🏦,
-🚀 Transaksi baru siap meluncur!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nAyo nabung makin rajin! 🌟,
-🌈 Tambahan catatan keuangan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nDompet makin berkembang! 🌱,
-⚡ Catatan keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Hari ini : <datetime ISO>\n <detail item transaksi dalam list>\n\nTerus pantau pengeluaranmu! 📈,
-🎉 Transaksi berhasil ditambahkan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nKeuanganmu makin teratur! 📅,
-✨ Data keuangan baru tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nSemangat kelola uangmu! 💼,
-🌟 Tambahan pengeluaran tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nLangkah kecil menuju keuangan sehat! 🌿,
-🎊 Catatan transaksi baru masuk!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Sekarang : <datetime ISO>\n <detail item transaksi dalam list>\n\nDompetmu siap diawasi! 👀,
-🚗 Transaksi baru berjalan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nTerus awasi arus kasmu! 🔄,
-💡 Informasi keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nPantau terus keuangannmu! 📊,
-🌺 Catatan pengeluaran baru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nKeuangan makin terkontrol! 🎯,
+（｡•̀ᴗ-）✧ Transaksi masuk, bos!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Hari ini : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting>,
+🍀 Oke, udah aku masukin ya~\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Sekarang : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 💪,
+🧃 Catatan baru sudah mendarat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> ✨,
+🎯 Transaksi berhasil dicatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📊,
+💫 Data baru tersimpan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🏦,
+🚀 Transaksi baru siap meluncur!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌟,
+🌈 Tambahan catatan keuangan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌱,
+⚡ Catatan keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Hari ini : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📈,
+🎉 Transaksi berhasil ditambahkan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📅,
+✨ Data keuangan baru tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 💼,
+🌟 Tambahan pengeluaran tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌿,
+🎊 Catatan transaksi baru masuk!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Sekarang : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 👀,
+🚗 Transaksi baru berjalan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🔄,
+💡 Informasi keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📊,
+🌺 Catatan pengeluaran baru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🎯,
 
 
 Jika masih ada yang belum dipahami, tanyakan kembali ke user.
@@ -85,15 +86,31 @@ if (!OPENAI_API_KEY) {
 
 bot.command("start", (ctx: any) => {
   return ctx.send(
-    "Halo! Aku Dompetku Bot. Kirim teks pembelian seperti: 'beli ayam 5kg, perkilonya 10rb' atau '3x5000' dan aku hitung totalnya."
+    `Halo! 👋 Aku Dompetku Bot, asisten keuanganmu yang siap bantu catat pengeluaran & pemasukan!
+
+📝 Cara pakai:
+• Kirim: "beli kopi 25k" → otomatis tercatat
+• Kirim: "3x5000" → total 15rb langsung masuk
+• Kirim: "gaji 5 juta" → catat pemasukan
+• Atau voice note juga bisa! 🎤
+
+💡 Tips:
+• Gunakan preset: "simpan harga kopi 25k per gelas" → lain kali cukup "2 kopi"
+• Lihat history: "lihat pengeluaran" atau "lihat pemasukan"
+• Edit/hapus: "ubah transaksi <id>" atau "hapus transaksi <id>"
+
+Ayo mulai catat keuanganmu sekarang! 💪✨`
   );
 })
   .onStart(({ info }) => {
     console.log(`✨ Bot @${info.username} telah berjalan.`);
   })
   .on("message", async (ctx) => {
+    ctx.sendChatAction("typing");
+
     let text: string | null = ctx.text ?? null;
     let isVoice = false;
+    let isImage = false;
     try {
       if (!text && ctx.voice) {
         isVoice = true;
@@ -113,12 +130,22 @@ bot.command("start", (ctx: any) => {
       return ctx.send("Maaf, aku tidak bisa memproses voice note ini.");
     }
 
+    if (!text && ctx.photo) {
+      isImage = true;
+      // Prefer GramIO context.download() per docs: https://gramio.dev/files/download
+      let buffer: ArrayBuffer | null = null;
+      buffer = await ctx.download();
+
+      if (buffer) {
+        text = await readReceiptData(buffer, "id");
+      }
+    }
+
     if (!text) return;
 
     // Chat logging: log incoming chat
     logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
 
-    ctx.sendChatAction("typing");
 
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
     const thinkingText = getRandomThinkingMessage();
@@ -147,7 +174,7 @@ bot.command("start", (ctx: any) => {
       userId: user.id,
       message: text,
       role: MessageRole.USER,
-      messageType: isVoice ? MessageType.VOICE : MessageType.TEXT,
+      messageType: isVoice ? MessageType.VOICE : isImage ? MessageType.PHOTO : MessageType.TEXT,
       toolUsed: null,
       coinsUsed: null,
       tokensIn: null,
@@ -184,7 +211,7 @@ bot.command("start", (ctx: any) => {
 
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
-          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls[0]?.function.name, " step:", step);
+          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls[0]?.function.name, " step:", step, " with ", assistantMsg.tool_calls.length, "total tool call");
           
           messages.push(assistantMsg);
 
@@ -204,12 +231,6 @@ bot.command("start", (ctx: any) => {
 
             let result: any;
             try {
-              try {
-                ctx.editMessageText(getToolProgressText(name), { message_id: thinkingMsg.id });
-              } catch (e: any) {
-                logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (progress)");
-              }
-
               if (name === "create_expense") {
                 result = await createExpense({ ...argsObj, telegramId: chatId } as any);
               } else if (name === "create_expense_many") {
@@ -225,19 +246,29 @@ bot.command("start", (ctx: any) => {
                 } else {
                   result = await saveUserMemory(user.id, key, { price, unit });
                 }
-              } else if (name === "get_memory") {
-                const key = String((argsObj as any).key || "").trim();
-                const item = key ? await getUserMemory(user.id, key) : null;
-                if (item) {
-                  result = { ok: true, key, price: item.price, unit: item.unit };
-                } else {
-                  result = { ok: false, error: "Data tidak ditemukan" };
-                }
-              } else if (name === "delete_memory") {
-                const key = String((argsObj as any).key || "").trim();
-                result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
-              } else if (name === "update_expense") {
-                result = await updateExpense(argsObj as any);
+          } else if (name === "get_memory") {
+            const key = String((argsObj as any).key || "").trim();
+            const item = key ? await getUserMemory(user.id, key) : null;
+            if (item) {
+              result = { ok: true, key, price: item.price, unit: item.unit };
+            } else {
+              result = { ok: false, error: "Data tidak ditemukan" };
+            }
+          } else if (name === "delete_memory") {
+            const key = String((argsObj as any).key || "").trim();
+            result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
+          } else if (name === "save_memory_many") {
+            const items = Array.isArray((argsObj as any).items) ? ((argsObj as any).items as any[]) : [];
+            const normalized = items
+              .map((it) => ({
+                key: String(it?.key || "").trim(),
+                price: toNumber(it?.price) ?? 0,
+                unit: String(it?.unit || "").trim(),
+              }))
+              .filter((it) => it.key && it.unit);
+            result = await saveMemoryMany(user.id, normalized as any);
+          } else if (name === "update_expense") {
+            result = await updateExpense(argsObj as any);
               } else if (name === "delete_expense") {
                 const expenseId = String((argsObj as any).expenseId || "");
                 const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } }) : null;
@@ -255,8 +286,6 @@ bot.command("start", (ctx: any) => {
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
               }
-
-              // Tool call logging: log tool execution result
               logger.info({ tool: name, args: argsObj, result }, "Tool call executed");
             } catch (toolErr: any) {
               logger.error({ tool: name, args: argsObj, error: toolErr?.message || toolErr }, "Tool call failed");
@@ -282,34 +311,6 @@ bot.command("start", (ctx: any) => {
             }
           }
 
-          // // Jika kita sudah punya ringkasan untuk user, kirimkan sekarang
-          // if (summaryText) {
-          //   // Update placeholder jadi selesai
-
-          //   try {
-          //   } catch (e: any) {
-          //     logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (done)");
-          //   }
-
-          //   await updateConversation({
-          //     id: conv.id,
-          //     tokensIn,
-          //     tokensOut,
-          //   });
-          //   await createConversation({
-          //     userId: user.id,
-          //     message: summaryText,
-          //     role: MessageRole.ASSISTANT,
-          //     messageType: MessageType.TEXT,
-          //     coinsUsed: null,
-          //     tokensIn: null,
-          //     tokensOut: null,
-          //   });
-          //   logger.info({ chatId, response: summaryText }, "Tool summary response sent");
-          //   return ctx.send(summaryText, { parse_mode: "Markdown" });
-          // }
-
-          // lanjut ke iterasi berikutnya
           continue;
         }
 

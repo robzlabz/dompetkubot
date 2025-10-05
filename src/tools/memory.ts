@@ -18,6 +18,31 @@ export const memoryTools = [
   {
     type: "function",
     function: {
+      name: "save_memory_many",
+      description: "Simpan atau perbarui banyak preset item sekaligus (key, price, unit).",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                key: { type: "string" },
+                price: { type: ["number", "string"] },
+                unit: { type: "string" },
+              },
+              required: ["key", "price", "unit"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_memory",
       description: "Ambil data memory berdasarkan nama item.",
       parameters: {
