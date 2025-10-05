@@ -14,6 +14,7 @@ import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { toNumber } from "./utils/money";
 import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
+import { format } from "path";
 
 // Environment validation
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -140,6 +141,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
       if (buffer) {
         text = await readReceiptData(buffer, "id");
+        logger.info({ chatId: ctx.chat.id, text }, "Incoming image message");
       }
     }
 
@@ -213,7 +215,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
-          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls[0]?.function.name, " step:", step, " with ", assistantMsg.tool_calls.length, "total tool call");
+          ctx.editMessageText(getToolProgressText(assistantMsg.tool_calls[0]?.function.name || "thinking...."), { parse_mode: "Markdown", message_id: thinkingMsg.id });
           
           messages.push(assistantMsg);
 
