@@ -3,7 +3,7 @@ import { bot } from "./services/telegramBot";
 import { openai } from "./services/openai";
 import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
-import { createExpense, readExpense, updateExpense, deleteExpense } from "./services/ExpenseService";
+import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
 import { Hooks } from "gramio";
 import { prisma } from "./services/prisma";
@@ -27,6 +27,7 @@ Tugasmu:
 - Tentukan kategori umum (makanan, transportasi, gaji, hiburan, dll).
 - Gunakan tool call untuk melakukan CRUD expense bila diperlukan:
   - create_expense: membuat pengeluaran. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
+  - create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
   - read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
   - update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
   - delete_expense: menghapus pengeluaran. Field: expenseId (string).
@@ -143,6 +144,15 @@ bot.command("start", (ctx: any) => {
               if (name === "create_expense") {
                 lastToolUsed = "create_expense";
                 result = await createExpense({ ...argsObj, telegramId: chatId } as any);
+                if (result?.ok) {
+                  const expenseId = result.expenseId;
+                  const amount = Number(result.amount || 0);
+                  const comment = String((argsObj as any).description || "");
+                  summaryText = `✅ berhasil di catat\ntransaksi: ${expenseId}\n\ntotal keluar ${formatRupiah(amount)}\n\n${comment}`.trim();
+                }
+              } else if (name === "create_expense_many") {
+                lastToolUsed = "create_expense_many";
+                result = await createExpenseMany({ ...argsObj, telegramId: chatId } as any);
                 if (result?.ok) {
                   const expenseId = result.expenseId;
                   const amount = Number(result.amount || 0);

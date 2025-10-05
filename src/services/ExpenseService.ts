@@ -108,6 +108,65 @@ export async function createExpense(args: CreateExpenseArgs): Promise<ServiceOk<
   return { ok: true, expenseId, amount: finalAmount, itemsCount: itemsInput.length };
 }
 
+// Create many expense items under a single expense; total amount = sum of item prices
+type CreateExpenseManyArgs = {
+  telegramId: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  description?: string | null;
+  items: Array<{ name: string; price: number | string; quantity?: number | string | null }>;
+};
+
+export async function createExpenseMany(args: CreateExpenseManyArgs): Promise<ServiceOk<{ expenseId: string; amount: number; itemsCount: number }> | ServiceErr> {
+  const telegramId: string = String(args.telegramId);
+  const user = await getOrCreateUserByTelegramId(telegramId);
+  const category = await resolveCategory({ userId: user.id, categoryId: args.categoryId ?? null, categoryName: args.categoryName ?? null });
+
+  if (!Array.isArray(args.items) || args.items.length === 0) {
+    return { ok: false, error: "Items are required" };
+  }
+
+  const itemsInput = args.items
+    .map((it) => {
+      const qty = toNumber(it.quantity ?? 1) ?? 1;
+      const unit = toNumber(it.price) ?? 0;
+      return { name: String(it.name), quantity: Math.max(1, Math.floor(qty)), unitPrice: Math.max(0, unit) };
+    })
+    .filter((it) => it.name && it.quantity > 0 && it.unitPrice >= 0);
+
+  const finalAmount = itemsInput.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
+
+  const expenseId = nanoid(10);
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const createdExpense = await tx.expense.create({
+      data: {
+        expenseId,
+        userId: user.id,
+        amount: finalAmount,
+        description: String(args.description ?? ""),
+        categoryId: category.id,
+        calculationExpression: itemsInput.map((it) => `${it.quantity}x${it.unitPrice}`).join(" + "),
+      },
+    });
+
+    if (itemsInput.length > 0) {
+      await tx.expenseItem.createMany({
+        data: itemsInput.map((it) => ({
+          expenseId: createdExpense.id,
+          name: it.name,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          totalPrice: it.quantity * it.unitPrice,
+        })),
+      });
+    }
+
+    return createdExpense;
+  });
+
+  return { ok: true, expenseId, amount: finalAmount, itemsCount: itemsInput.length };
+}
+
 export async function readExpense(args: ReadExpenseArgs): Promise<ServiceOk<{ data: ExpenseWithRelations | ExpenseWithRelations[] | null }> | ServiceErr> {
   if (args.expenseId) {
     const e = await prisma.expense.findUnique({ where: { expenseId: String(args.expenseId) }, include: { items: true, category: true, user: true } });
