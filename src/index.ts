@@ -34,7 +34,12 @@ Tugasmu:
  - Gunakan tool call untuk Memory/Preset System:
    - save_memory: simpan atau perbarui preset item (key, price, unit).
    - get_memory: ambil preset item berdasarkan key.
-   - delete_memory: hapus preset item berdasarkan key.
+ - delete_memory: hapus preset item berdasarkan key.
+ - Catatan: Kamu boleh menggunakan beberapa tool call secara berurutan (multi-step) dalam satu percakapan untuk menyelesaikan tugas.
+   Contoh:
+   - get_memory("ayam") → konversi unit dan hitung total → create_expense
+   - read_expense → update_expense (edit transaksi yang baru)
+   - save_memory → create_expense_many (pakai preset harga untuk beberapa item)
  - Gunakan tool call untuk melakukan CRUD income bila diperlukan:
    - create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
    - read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
