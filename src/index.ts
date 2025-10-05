@@ -54,10 +54,25 @@ Tool call untuk CRUD income:
 - update_income: memperbarui pemasukan. Field: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
 - delete_income: menghapus pemasukan. Field: incomeId (string).
 
-Tool call untuk mengirim pesan final:
-- send_final_message: kirim pesan final ke user dan akhiri alur. Field: text (string). Tool ini HARUS dipanggil di langkah TERAKHIR bila kamu ingin menutup jawaban melalui tool.
+Jawab dengan bahasa santai dan mudah dipahami. harus user frienly, cute dan penuh emosional (emoji juga diijinkan)
+contoh balasan
+（｡•̀ᴗ-）✧ Transaksi masuk, bos!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Hari ini : <datetime ISO>\n <detail item transaksi dalam list>\n\n🧾 Dompet udah update, jangan khawatir 😆,
+🍀 Oke, udah aku masukin ya~\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Sekarang : <datetime ISO>\n <detail item transaksi dalam list>\n\nLangkah kecil, keuangan besar! 💪,
+🧃 Catatan baru sudah mendarat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nGas terus kelola finansialmu ✨,
+🎯 Transaksi berhasil dicatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nDompetmu makin transparan! 📊,
+💫 Data baru tersimpan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nSemangat nabung terus yaa! 🏦,
+🚀 Transaksi baru siap meluncur!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nAyo nabung makin rajin! 🌟,
+🌈 Tambahan catatan keuangan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nDompet makin berkembang! 🌱,
+⚡ Catatan keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Hari ini : <datetime ISO>\n <detail item transaksi dalam list>\n\nTerus pantau pengeluaranmu! 📈,
+🎉 Transaksi berhasil ditambahkan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nKeuanganmu makin teratur! 📅,
+✨ Data keuangan baru tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nSemangat kelola uangmu! 💼,
+🌟 Tambahan pengeluaran tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nLangkah kecil menuju keuangan sehat! 🌿,
+🎊 Catatan transaksi baru masuk!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Sekarang : <datetime ISO>\n <detail item transaksi dalam list>\n\nDompetmu siap diawasi! 👀,
+🚗 Transaksi baru berjalan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 <datetime ISO>\n <detail item transaksi dalam list>\n\nTerus awasi arus kasmu! 🔄,
+💡 Informasi keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime ISO>\n <detail item transaksi dalam list>\n\nPantau terus keuangannmu! 📊,
+🌺 Catatan pengeluaran baru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Jumlah   : <rp total>\n🕒 Waktu    : <datetime ISO>\n <detail item transaksi dalam list>\n\nKeuangan makin terkontrol! 🎯,
 
-Jawab dengan bahasa santai dan mudah dipahami.
+
 Jika masih ada yang belum dipahami, tanyakan kembali ke user.
 `;
 
@@ -108,7 +123,6 @@ bot.command("start", (ctx: any) => {
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
     const thinkingText = getRandomThinkingMessage();
     const thinkingMsg = await ctx.send(thinkingText);
-    
 
     const chatId = String(ctx.chat.id);
 
@@ -149,10 +163,10 @@ bot.command("start", (ctx: any) => {
 
     let tokensIn = 0;
     let tokensOut = 0;
-    let lastToolUsed: string | null = null;
     let toolsUsed: string[] = [];
 
     for (let step = 0; step < 10; step++) {
+      console.log("===>>> step", step);
       try {
         const completion = await openai.chat.completions.create({
           model: OPENAI_MODEL,
@@ -170,7 +184,8 @@ bot.command("start", (ctx: any) => {
 
         // Jika ada tool call, jalankan lalu teruskan loop
         if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
-          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls);
+          console.log("===>>> assistantMsg.tool_calls", assistantMsg.tool_calls[0]?.function.name, " step:", step);
+          
           messages.push(assistantMsg);
 
           for (const toolCall of assistantMsg.tool_calls) {
@@ -189,37 +204,19 @@ bot.command("start", (ctx: any) => {
 
             let result: any;
             try {
-              // Update pesan placeholder agar user tahu tool yang sedang dipakai
               try {
-                await ctx.editMessageText(getToolProgressText(name), { message_id: thinkingMsg.id });
+                ctx.editMessageText(getToolProgressText(name), { message_id: thinkingMsg.id });
               } catch (e: any) {
                 logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (progress)");
               }
+
               if (name === "create_expense") {
-                lastToolUsed = "create_expense";
                 result = await createExpense({ ...argsObj, telegramId: chatId } as any);
-                if (result?.ok) {
-                  const expenseId = result.expenseId;
-                  const amount = Number(result.amount || 0);
-                  const comment = String((argsObj as any).description || "");
-                  const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
-                  // summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
-                }
               } else if (name === "create_expense_many") {
-                lastToolUsed = "create_expense_many";
                 result = await createExpenseMany({ ...argsObj, telegramId: chatId } as any);
-                if (result?.ok) {
-                  const expenseId = result.expenseId;
-                  const amount = Number(result.amount || 0);
-                  const comment = String((argsObj as any).description || "");
-                  const created = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
-                  // summaryText = formatFriendlyExpenseMessage("create", { categoryName: created?.category?.name, amount, description: created?.description ?? comment, date: created?.createdAt ?? new Date() });
-                }
               } else if (name === "read_expense") {
-                lastToolUsed = "read_expense";
                 result = await readExpense({ ...argsObj, telegramId: chatId } as any);
               } else if (name === "save_memory") {
-                lastToolUsed = "save_memory";
                 const key = String((argsObj as any).key || "").trim();
                 const price = toNumber((argsObj as any).price) ?? 0;
                 const unit = String((argsObj as any).unit || "").trim();
@@ -227,13 +224,8 @@ bot.command("start", (ctx: any) => {
                   result = { ok: false, error: "Key dan unit wajib diisi" };
                 } else {
                   result = await saveUserMemory(user.id, key, { price, unit });
-                  if ((result as any)?.ok) {
-                    const pretty = formatRupiah(price);
-                    // summaryText = `💾 Disimpan!\n📦 Item: ${key}\n💰 Harga: ${pretty}\n⚖️ Satuan: ${unit}\n✅ Sekarang aku ingat ya! 😉`;
-                  }
                 }
               } else if (name === "get_memory") {
-                lastToolUsed = "get_memory";
                 const key = String((argsObj as any).key || "").trim();
                 const item = key ? await getUserMemory(user.id, key) : null;
                 if (item) {
@@ -241,69 +233,25 @@ bot.command("start", (ctx: any) => {
                 } else {
                   result = { ok: false, error: "Data tidak ditemukan" };
                 }
-                // Jangan kirim summaryText agar loop bisa lanjut memakai data ini
               } else if (name === "delete_memory") {
-                lastToolUsed = "delete_memory";
                 const key = String((argsObj as any).key || "").trim();
                 result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
-                if ((result as any)?.ok) {
-                  // summaryText = `🗑️ Oke, data ${key} sudah aku hapus dari memory.\nKalau mau, kita bisa simpan lagi versi terbaru nanti ✨`;
-                }
               } else if (name === "update_expense") {
-                lastToolUsed = "update_expense";
                 result = await updateExpense(argsObj as any);
-                if (result?.ok) {
-                  const expenseId = String(result.expenseId);
-                  const updated = await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } });
-                  const amount = Number(updated?.amount || 0);
-                  const comment = String(updated?.description || "");
-                  // summaryText = formatFriendlyExpenseMessage("update", { categoryName: updated?.category?.name, amount, description: comment, date: new Date() });
-                }
               } else if (name === "delete_expense") {
-                lastToolUsed = "delete_expense";
                 const expenseId = String((argsObj as any).expenseId || "");
                 const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } }) : null;
-                result = await deleteExpense(argsObj as any);
-                if (result?.ok) {
-                  const comment = String(existing?.description || "");
-                  // summaryText = formatFriendlyExpenseMessage("delete", { categoryName: existing?.category?.name, amount: Number(existing?.amount || 0), description: comment, date: existing?.createdAt ?? new Date() });
-                }
+                result = existing ? await deleteExpense(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
               } else if (name === "create_income") {
-                lastToolUsed = "create_income";
                 result = await createIncome({ ...argsObj, telegramId: chatId } as any);
-                if (result?.ok) {
-                  const incomeId = result.incomeId;
-                  const amount = Number(result.amount || 0);
-                  const comment = String((argsObj as any).description || "");
-                  // summaryText = `✅ berhasil di catat\npemasukan: ${incomeId}\n\ntotal masuk ${formatRupiah(amount)}\n\n${comment}`.trim();
-                }
               } else if (name === "read_income") {
-                lastToolUsed = "read_income";
                 result = await readIncome({ ...argsObj, telegramId: chatId } as any);
               } else if (name === "update_income") {
-                lastToolUsed = "update_income";
                 result = await updateIncome(argsObj as any);
-                if (result?.ok) {
-                  const incomeId = String(result.incomeId);
-                  const updated = await prisma.income.findUnique({ where: { incomeId } });
-                  const amount = Number(updated?.amount || 0);
-                  const comment = String(updated?.description || "");
-                  // summaryText = `✅ berhasil di edit\npemasukan: ${incomeId}\n\ntotal diubah ${formatRupiah(amount)}\n\n${comment}`.trim();
-                }
               } else if (name === "delete_income") {
-                lastToolUsed = "delete_income";
                 const incomeId = String((argsObj as any).incomeId || "");
                 const existing = incomeId ? await prisma.income.findUnique({ where: { incomeId } }) : null;
-                result = await deleteIncome(argsObj as any);
-                if (result?.ok) {
-                  const comment = String(existing?.description || "");
-                  // summaryText = `✅ berhasil di hapus\npemasukan: ${result.incomeId}\n\ntotal diubah ${formatRupiah(0)}\n\n${comment}`.trim();
-                }
-              } else if (name === "send_final_message") {
-                lastToolUsed = "send_final_message";
-                const text = String((argsObj as any).text || "");
-                result = { ok: true };
-                return ctx.send(text, { parse_mode: "Markdown" });
+                result = existing ? await deleteIncome(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
               } else {
                 result = { ok: false, error: "Perintah tidak dikenal" };
               }
@@ -339,14 +287,12 @@ bot.command("start", (ctx: any) => {
           //   // Update placeholder jadi selesai
 
           //   try {
-          //     await ctx.editMessageText(getToolDoneText(lastToolUsed || "AI POPO"));
           //   } catch (e: any) {
           //     logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (done)");
           //   }
 
           //   await updateConversation({
           //     id: conv.id,
-          //     toolUsed: lastToolUsed ?? null,
           //     tokensIn,
           //     tokensOut,
           //   });
@@ -355,7 +301,6 @@ bot.command("start", (ctx: any) => {
           //     message: summaryText,
           //     role: MessageRole.ASSISTANT,
           //     messageType: MessageType.TEXT,
-          //     toolUsed: lastToolUsed ?? null,
           //     coinsUsed: null,
           //     tokensIn: null,
           //     tokensOut: null,
@@ -370,11 +315,6 @@ bot.command("start", (ctx: any) => {
 
         // Tidak ada tool call, anggap ini respons final untuk user
         const finalText = assistantMsg.content ?? "Maaf, aku belum bisa memahami.";
-        try {
-          await ctx.editMessageText(getToolDoneText(lastToolUsed || "ini dia hasilnya...."),{ message_id: thinkingMsg.id });
-        } catch (e: any) {
-          logger.warn({ chatId, error: e?.message || e }, "Failed to edit thinking message (final)");
-        }
         const usedStrFinal = toolsUsed.length ? toolsUsed.join(",") : null;
         await updateConversation({
           id: conv.id,
