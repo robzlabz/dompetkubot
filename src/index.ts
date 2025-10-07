@@ -10,10 +10,12 @@ import { createIncome, readIncome, updateIncome, deleteIncome } from "./services
 import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory, saveMemoryMany } from "./services/MemoryService";
 import { prisma } from "./services/prisma";
 import { createConversation, coversationByUser, updateConversation } from "./services/ConversationService";
-import { MessageType, MessageRole } from "../prisma/src/generated";
+import { MessageType, MessageRole } from "@prisma/client";
 import logger from "./services/logger";
 import { toNumber } from "./utils/money";
 import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
+import { today } from "./command/today";
+import { createOrUpdateUser } from "./services/UserService";
 
 // Helper untuk aman mengedit teks dengan fallback jika Markdown gagal
 async function safeEditMarkdown(ctx: any, text: string, messageId: number) {
@@ -125,98 +127,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     console.log(`✨ Bot @${info.username} telah berjalan.`);
   })
   .command("today", async (ctx) => {
-    const chatId = ctx.chat.id;
-    const thinkingText = getRandomThinkingMessage();
-    const thinkingMsg = await ctx.send(thinkingText);
-
-    let user = await prisma.user.findUnique({ where: { telegramId: String(chatId) } });
-    if (!user) {
-      user = await prisma.user.create({ data: { telegramId: String(chatId), language: "id" } });
-    }
-
-    try {
-      // Rentang hari ini (lokal)
-      const now = new Date();
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(now);
-      end.setHours(23, 59, 59, 999);
-
-      // Ambil pengeluaran dan pemasukan
-      const expenses = await prisma.expense.findMany({
-        where: { userId: user.id, createdAt: { gte: start, lte: end } },
-        include: { category: true },
-        orderBy: { createdAt: "asc" },
-      });
-      const incomes = await prisma.income.findMany({
-        where: { userId: user.id, createdAt: { gte: start, lte: end } },
-        orderBy: { createdAt: "asc" },
-      });
-
-      // Util format Rupiah
-      const fmt = (n: number) => `Rp. ${new Intl.NumberFormat("id-ID").format(Math.max(0, Math.round(n)))}`;
-
-      // Ringkas baris
-      const expenseLines = expenses
-        .map((e) => `- ${e.expenseId}, ${fmt(e.amount)}, ${e.category?.name ?? "-"}, ${e.description ?? "-"}`)
-        .join("\n");
-      const incomeLines = incomes
-        .map((i) => `- ${i.incomeId}, ${fmt(i.amount)}, ${i.description ?? "-"}`)
-        .join("\n");
-
-      const totalExpense = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-      const totalIncome = incomes.reduce((s, i) => s + (i.amount || 0), 0);
-      const diff = totalIncome - totalExpense;
-
-      // Cari kategori pengeluaran terbesar hari ini (opsional untuk saran)
-      const topCategory = (() => {
-        const map = new Map<string, number>();
-        for (const e of expenses) {
-          const key = e.category?.name ?? "(tanpa kategori)";
-          map.set(key, (map.get(key) || 0) + (e.amount || 0));
-        }
-        let best: { name: string; amount: number } | null = null;
-        for (const [name, amount] of map.entries()) {
-          if (!best || amount > best.amount) best = { name, amount };
-        }
-        return best;
-      })();
-
-      // Saran singkat
-      let suggestion = "Catatan rapi! Teruskan kebiasaan mencatat harian.";
-      if (totalExpense === 0 && totalIncome === 0) {
-        suggestion = "Belum ada transaksi hari ini. Coba catat belanja kecil atau pemasukan.";
-      } else if (diff < 0) {
-        suggestion = `Defisit hari ini. Pertimbangkan kurangi pengeluaran${topCategory ? ` (terutama ${topCategory.name}: ${fmt(topCategory.amount)})` : ""}.`;
-      } else if (diff > 0) {
-        suggestion = "Surplus hari ini. Bagus! Sisihkan sebagian ke tabungan atau dana darurat.";
-      } else {
-        suggestion = "Seimbang. Pertahankan, dan evaluasi kebutuhan sebelum belanja.";
-      }
-
-      const output = [
-        "*pengeluaran*",
-        expenseLines || "Tidak ada transaksi hari ini.",
-        "",
-        `total ${fmt(totalExpense)}`,
-        "",
-        "*pendapatan*",
-        incomeLines || "Tidak ada transaksi hari ini.",
-        "",
-        `total ${fmt(totalIncome)}`,
-        "",
-        "perbandingan pendapatan vs pengeluaran",
-        `Pendapatan: ${fmt(totalIncome)} | Pengeluaran: ${fmt(totalExpense)} | Selisih: ${fmt(diff)} ${diff >= 0 ? "(surplus)" : "(defisit)"}`,
-        "",
-        "suggestion",
-        suggestion,
-      ].join("\n");
-
-      return ctx.editMessageText(output, { parse_mode: "Markdown", message_id: thinkingMsg.id });
-    } catch (err: any) {
-      logger.error({ chatId, error: err?.message || err }, "Inline /today failed");
-      return ctx.editMessageText("Maaf, terjadi kesalahan saat mengambil data hari ini.", { parse_mode: "Markdown", message_id: thinkingMsg.id });
-    }
+    await today(ctx as any);
   })
   .on("message", async (ctx) => {
     let text: string | null = ctx.text ?? null;
@@ -273,9 +184,6 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     const dd = String(now.getDate()).padStart(2, '0');
     const hh = String(now.getHours()).padStart(2, '0');
     const ii = String(now.getMinutes()).padStart(2, '0');
-    // Prepend a clear, human-readable timestamp so the LLM knows when the user spoke
-    text = `[${yyyy}-${mm}-${dd} ${hh}:${ii}] ${text}`;
-
 
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
     const thinkingText = getRandomThinkingMessage();
@@ -284,10 +192,12 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     const chatId = String(ctx.chat.id);
 
     // Dapatkan atau buat user berdasarkan telegramId
-    let user = await prisma.user.findUnique({ where: { telegramId: chatId } });
-    if (!user) {
-      user = await prisma.user.create({ data: { telegramId: chatId, language: "id" } });
-    }
+    const user = await createOrUpdateUser({
+      telegramId: chatId,
+      language: "id",
+      firstName: ctx.chat.firstName || "User",
+      lastName: ctx.chat.lastName || "",
+    });
 
     // Ambil history conversation untuk context
     const history = await coversationByUser({ userId: user.id, limit: 20 });

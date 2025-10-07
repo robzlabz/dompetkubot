@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { nanoid } from "nanoid";
 import { toNumber } from "../utils/money";
-import type { Prisma, User, Income, Category } from "../../prisma/src/generated";
+import type { Prisma, User, Income, Category } from "@prisma/client";
 
 type CreateIncomeArgs = {
   telegramId: string;
