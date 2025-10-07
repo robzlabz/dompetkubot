@@ -2,6 +2,8 @@ FROM oven/bun:latest AS base
 
 WORKDIR /app
 
+ENV TZ=Asia/Jakarta
+
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
