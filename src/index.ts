@@ -91,6 +91,9 @@ contoh balasan
 
 
 Jika masih ada yang belum dipahami, tanyakan kembali ke user.
+
+NOTE:
+- Sekarang hari {day} {date} {time} WIB
 `;
 
 if (!TELEGRAM_BOT_TOKEN) {
@@ -310,7 +313,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
     // Agent loop dengan maksimal 10 langkah tool call
     let messages: Array<any> = [
-      { role: "system", content: SYSTEM_PROMPT.trim() },
+      { role: "system", content: SYSTEM_PROMPT.trim().replace("{day}", now.toLocaleString("id-ID", { weekday: "long" })).replace("{date}", `${dd}/${mm}/${yyyy}`).replace("{time}", `${hh}:${ii}`) },
       ...historyMessages,
       { role: "user", content: text },
     ];
