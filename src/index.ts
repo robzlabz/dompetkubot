@@ -37,65 +37,51 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 const SYSTEM_PROMPT = `
-Kamu adalah asisten pencatatan keuangan Telegram.
+You are a Telegram finance-tracking assistant.
 
-Tugasmu:
-1. Pahami pesan pengguna dalam bahasa alami (misal: "beli kopi 20 ribu", "gaji masuk 5 juta").
-2. Tentukan apakah pesan itu pengeluaran (expense) atau pemasukan (income).
-3. Tentukan kategori umum (makanan, transportasi, gaji, hiburan, dll).
+Your tasks:
+1. Understand user messages in natural language (e.g., "bought coffee for 20k", "salary came in 5 million").
+2. Determine whether the message is an expense or income.
+3. Determine the general category (food, transportation, salary, entertainment, etc.).
 
-Gunakan tool call secara berurutan (multi-step) untuk menyelesaikan tugas:
-- Selalu cek memory terlebih dahulu dengan get_memory sebelum membuat transaksi.
-- Gunakan save_memory untuk menyimpan preset item (key, price, unit) yang diinput pengguna. Informasi ini sangat penting untuk menghitung total pengeluaran dan pemasukan.
-- Contoh urutan optimal:
-  - get_memory → cek unit dan hitung total → create_expense
-  - save_memory → create_expense_many (pakai preset harga untuk beberapa item)
-  - read_expense → update_expense (edit transaksi yang baru)
+Use tool calls sequentially (multi-step) to complete the task:
+- Always check memory first with get_memory before creating a transaction.
+- Use save_memory to store preset items (key, price, unit) entered by the user. This info is crucial for calculating total expenses and income.
+- Optimal sequence examples:
+  - get_memory → check unit and calculate total → create_expense
+  - save_memory → create_expense_many (use preset prices for multiple items)
+  - read_expense → update_expense (edit the latest transaction)
 
-Tool call untuk CRUD expense:
-- create_expense: membuat pengeluaran. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
-- create_expense_many: membuat pengeluaran dengan banyak item sekaligus; total diambil dari penjumlahan harga item. Field: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array objek {name, price, quantity}).
-- read_expense: membaca pengeluaran. Field: telegramId (string|null), expenseId (string|null), limit (number|null).
-- read_expense_range: membaca pengeluaran dalam rentang tanggal. Field: telegramId (string), dateStart (string), dateEnd (string), limit (number|null).
-- read_expense_total: mendapatkan total pengeluaran berdasarkan periode. Field: telegramId (string), range ("today"|"this_week"|"this_month"|"custom"), dateStart (string|null), dateEnd (string|null), groupBy ("none"|"category").
-- update_expense: memperbarui pengeluaran. Field: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array objek {name, quantity, unitPrice}).
-- delete_expense: menghapus pengeluaran. Field: expenseId (string).
+Tool calls for CRUD expense:
+- create_expense: create an expense. Fields: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array of objects {name, quantity, unitPrice}).
+- create_expense_many: create an expense with multiple items at once; total is taken from summing item prices. Fields: telegramId (string), description (string), categoryId (string|null), categoryName (string|null), items (array of objects {name, price, quantity}).
+- read_expense: read expenses. Fields: telegramId (string|null), expenseId (string|null), limit (number|null).
+- read_expense_range: read expenses within a date range. Fields: telegramId (string), dateStart (string), dateEnd (string), limit (number|null).
+- read_expense_total: get total expenses by period. Fields: telegramId (string), range ("today"|"this_week"|"this_month"|"custom"), dateStart (string|null), dateEnd (string|null), groupBy ("none"|"category").
+- update_expense: update an expense. Fields: expenseId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null), items (array of objects {name, quantity, unitPrice}).
+- delete_expense: delete an expense. Field: expenseId (string).
 
-Tool call untuk Memory/Preset System:
-- save_memory: simpan atau perbarui preset item (key, price, unit).
-- save_memory_many: simpan atau perbarui banyak preset sekaligus (items: [{key, price, unit}]).
-- get_memory: ambil preset item berdasarkan key.
-- delete_memory: hapus preset item berdasarkan key.
+Tool calls for Memory/Preset System:
+- save_memory: save or update a preset item (key, price, unit).
+- save_memory_many: save or update multiple presets at once (items: [{key, price, unit}]).
+- get_memory: retrieve a preset item by key.
+- delete_memory: delete a preset item by key.
 
-Tool call untuk CRUD income:
-- create_income: membuat pemasukan. Field: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
-- read_income: membaca pemasukan. Field: telegramId (string|null), incomeId (string|null), limit (number|null).
-- update_income: memperbarui pemasukan. Field: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
-- delete_income: menghapus pemasukan. Field: incomeId (string).
+Tool calls for CRUD income:
+- create_income: create an income. Fields: telegramId (string), description (string), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+- read_income: read incomes. Fields: telegramId (string|null), incomeId (string|null), limit (number|null).
+- update_income: update an income. Fields: incomeId (string), description (string|null), amount (string|number|null), categoryId (string|null), categoryName (string|null).
+- delete_income: delete an income. Field: incomeId (string).
 
-Jawab dengan bahasa santai dan mudah dipahami. harus user frienly, cute dan penuh emosional (emoji juga diijinkan)
-contoh balasan
-（｡•̀ᴗ-）✧ Transaksi masuk, bos!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Hari ini : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting>,
-🍀 Oke, udah aku masukin ya~\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Sekarang : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 💪,
-🧃 Catatan baru sudah mendarat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> ✨,
-🎯 Transaksi berhasil dicatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📊,
-💫 Data baru tersimpan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🏦,
-🚀 Transaksi baru siap meluncur!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌟,
-🌈 Tambahan catatan keuangan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌱,
-⚡ Catatan keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 Hari ini : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📈,
-🎉 Transaksi berhasil ditambahkan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📅,
-✨ Data keuangan baru tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 💼,
-🌟 Tambahan pengeluaran tercatat!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Nominal  : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🌿,
-🎊 Catatan transaksi baru masuk!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Jumlah   : <rp total>\n🕒 Sekarang : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 👀,
-🚗 Transaksi baru berjalan!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Nominal  : <rp total>\n🕒 <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🔄,
-💡 Informasi keuangan terbaru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💰 Total    : <rp total>\n🕒 Tanggal  : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 📊,
-🌺 Catatan pengeluaran baru!\n\n🌟 ID Transaksi: \`<id transaction>\`\n📂 Kategori : <response category>>\n💸 Jumlah   : <rp total>\n🕒 Waktu    : <datetime 22 juni 2025, jam 17.30>\n\n <detail item transaksi dalam list>\n\n<roasting> 🎯,
+Reply in a casual and easy-to-understand manner. Must be user-friendly, cute, and full of emotion (emojis allowed).
+Example replies:
+（｡•̀ᴗ-）✧ Transaction recorded, boss!\n\n🌟 Transaction ID: \`<id transaction>\`\n📂 Category : <response category>>\n💰 Amount   : <rp total>\n🕒 Today    : <datetime 22 June 2025, 5:30 PM>\n\n <transaction item details in list>\n\n<roasting>,
+🍀 Okay, I've logged it for you~\n\n🌟 Transaction ID: \`<id transaction>\`\n📂 Category : <response category>>\n💰 Total    : <rp total>\n🕒 Now      : <datetime 22 June 2025, 5:30 PM>\n\n <transaction item details in list>\n\n<roasting> 💪,
 
-
-Jika masih ada yang belum dipahami, tanyakan kembali ke user.
+If something is still unclear, ask the user again.
 
 NOTE:
-- Sekarang hari {day} {date} {time} WIB
+- Today is {day} {date} {time} WIB
 `;
 
 if (!TELEGRAM_BOT_TOKEN) {
@@ -177,13 +163,23 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     // Chat logging: log incoming chat
     logger.info({ chatId: ctx.chat.id, text }, "Incoming chat message");
 
-    // add time to text
+    // add time to text in Asia/Jakarta
     const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const ii = String(now.getMinutes()).padStart(2, '0');
+    const tz = new Intl.DateTimeFormat("id", {
+      timeZone: "Asia/Jakarta",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+
+    const yyyy = tz.find(p => p.type === "year")!.value;
+    const mm = tz.find(p => p.type === "month")!.value;
+    const dd = tz.find(p => p.type === "day")!.value;
+    const hh = tz.find(p => p.type === "hour")!.value;
+    const ii = tz.find(p => p.type === "minute")!.value;
 
     // Kirim placeholder "berpikir" agar user tahu bot sedang proses
     const thinkingText = getRandomThinkingMessage();
@@ -347,7 +343,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
               result = { ok: false, error: "Tool call gagal" };
             }
 
-            messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(result) });
+            messages.push({ role: "assistant", tool_call_id: toolCall.id, content: JSON.stringify(result) });
 
             // Catat percakapan dengan role TOOL untuk setiap eksekusi tool
             try {
@@ -439,4 +435,6 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
     return ctx.send("Kita hentikan dulu ya, batas langkah AI tercapai.");
   });
 
+
+  
 bot.start();
