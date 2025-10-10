@@ -5,6 +5,7 @@ import { expenseTools } from "./tools/expense";
 import { incomeTools } from "./tools/income";
 import { memoryTools } from "./tools/memory";
 import { finalTools } from "./tools/final";
+import { categoryTools } from "./tools/category";
 import { createExpense, readExpense, updateExpense, deleteExpense, createExpenseMany, readExpenseRange, readExpenseTotal } from "./services/ExpenseService";
 import { createIncome, readIncome, updateIncome, deleteIncome } from "./services/IncomeService";
 import { getMemory as getUserMemory, saveMemory as saveUserMemory, deleteMemory as deleteUserMemory, saveMemoryMany } from "./services/MemoryService";
@@ -16,6 +17,7 @@ import { toNumber } from "./utils/money";
 import { getRandomThinkingMessage, getToolProgressText } from "./utils/thinkingTemplates";
 import { today } from "./command/today";
 import { createOrUpdateUser } from "./services/UserService";
+import { createCategory as createUserCategory, getCategoryList, seedDefaultCategoriesByTelegramId } from "./services/CategoryService";
 
 // Helper untuk aman mengedit teks dengan fallback jika Markdown gagal
 async function safeEditMarkdown(ctx: any, text: string, messageId: number) {
@@ -77,6 +79,9 @@ Reply in a casual and easy-to-understand manner. Must be user-friendly, cute, an
 Example replies:
 （｡•̀ᴗ-）✧ Transaction recorded, boss!\n\n🌟 Transaction ID: \`<id transaction>\`\n📂 Category : <response category>>\n💰 Amount   : <rp total>\n🕒 Today    : <datetime 22 June 2025, 5:30 PM>\n\n <transaction item details in list>\n\n<roasting>,
 🍀 Okay, I've logged it for you~\n\n🌟 Transaction ID: \`<id transaction>\`\n📂 Category : <response category>>\n💰 Total    : <rp total>\n🕒 Now      : <datetime 22 June 2025, 5:30 PM>\n\n <transaction item details in list>\n\n<roasting> 💪,
+
+List Category of transaction must be
+{categoryList}
 
 If something is still unclear, ask the user again.
 
@@ -211,15 +216,13 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
       message: text,
       role: MessageRole.USER,
       messageType: isVoice ? MessageType.VOICE : isImage ? MessageType.PHOTO : MessageType.TEXT,
-      toolUsed: null,
-      coinsUsed: null,
-      tokensIn: null,
-      tokensOut: null,
     });
+
+    const categoryList = await getCategoryList(user.id);
 
     // Agent loop dengan maksimal 10 langkah tool call
     let messages: Array<any> = [
-      { role: "system", content: SYSTEM_PROMPT.trim().replace("{day}", now.toLocaleString("id-ID", { weekday: "long" })).replace("{date}", `${dd}/${mm}/${yyyy}`).replace("{time}", `${hh}:${ii}`) },
+      { role: "system", content: SYSTEM_PROMPT.trim().replace("{day}", now.toLocaleString("id-ID", { weekday: "long" })).replace("{date}", `${dd}/${mm}/${yyyy}`).replace("{time}", `${hh}:${ii}`).replace("{categoryList}", categoryList.join(", ")) },
       ...historyMessages,
       { role: "user", content: text },
     ];
@@ -233,7 +236,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
       try {
         const completion = await openai.chat.completions.create({
           model: OPENAI_MODEL,
-          tools: [...expenseTools, ...incomeTools, ...memoryTools, ...finalTools] as any,
+          tools: [...expenseTools, ...incomeTools, ...memoryTools, ...categoryTools, ...finalTools] as any,
           messages,
         });
 
@@ -242,6 +245,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
         const assistantMsg = completion.choices?.[0]?.message;
         if (!assistantMsg) {
+          logger.warn({ step }, "Empty assistant message");
           break;
         }
 
@@ -252,9 +256,18 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
           messages.push(assistantMsg);
 
           for (const toolCall of assistantMsg.tool_calls) {
+            // Catat tool call dengan role TOOL
             const name = toolCall.function?.name;
+            
+            if (!name) {
+              logger.warn({ step, toolCall }, "Empty tool call name");
+              continue;
+            }
+            
             if (name) toolsUsed.push(name as string);
+
             let argsObj: Record<string, unknown> = {};
+
             try {
               argsObj = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
             } catch (e) {
@@ -267,75 +280,116 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
             let result: any;
             try {
-              if (name === "create_expense") {
-                result = await createExpense({ ...argsObj, telegramId: chatId } as any);
-              } else if (name === "create_expense_many") {
-                result = await createExpenseMany({ ...argsObj, telegramId: chatId } as any);
-              } else if (name === "read_expense") {
-                result = await readExpense({ ...argsObj, telegramId: chatId } as any);
-              } else if (name === "read_expense_range") {
-                const dateStart = String((argsObj as any).dateStart || "");
-                const dateEnd = String((argsObj as any).dateEnd || "");
-                const limit = (argsObj as any).limit ?? null;
-                if (!dateStart || !dateEnd) {
-                  result = { ok: false, error: "dateStart dan dateEnd wajib diisi" };
-                } else {
-                  result = await readExpenseRange({ telegramId: chatId, dateStart, dateEnd, limit } as any);
+              switch (name) {
+                case "create_expense":
+                  result = await createExpense({ ...argsObj, telegramId: chatId } as any);
+                  break;
+                case "create_expense_many":
+                  result = await createExpenseMany({ ...argsObj, telegramId: chatId } as any);
+                  break;
+                case "read_expense":
+                  result = await readExpense({ ...argsObj, telegramId: chatId } as any);
+                  break;
+                case "read_expense_range": {
+                  const dateStart = String((argsObj as any).dateStart || "");
+                  const dateEnd = String((argsObj as any).dateEnd || "");
+                  const limit = (argsObj as any).limit ?? null;
+                  if (!dateStart || !dateEnd) {
+                    result = { ok: false, error: "dateStart dan dateEnd wajib diisi" };
+                  } else {
+                    result = await readExpenseRange({ telegramId: chatId, dateStart, dateEnd, limit } as any);
+                  }
+                  break;
                 }
-              } else if (name === "read_expense_total") {
-                const range = String((argsObj as any).range || "today");
-                const dateStart = (argsObj as any).dateStart ?? null;
-                const dateEnd = (argsObj as any).dateEnd ?? null;
-                const groupBy = String((argsObj as any).groupBy || "none");
-                result = await readExpenseTotal({ telegramId: chatId, range, dateStart, dateEnd, groupBy } as any);
-              } else if (name === "save_memory") {
-                const key = String((argsObj as any).key || "").trim();
-                const price = toNumber((argsObj as any).price) ?? 0;
-                const unit = String((argsObj as any).unit || "").trim();
-                if (!key || !unit) {
-                  result = { ok: false, error: "Key dan unit wajib diisi" };
-                } else {
-                  result = await saveUserMemory(user.id, key, { price, unit });
+                case "read_expense_total": {
+                  const range = String((argsObj as any).range || "today");
+                  const dateStart = (argsObj as any).dateStart ?? null;
+                  const dateEnd = (argsObj as any).dateEnd ?? null;
+                  const groupBy = String((argsObj as any).groupBy || "none");
+                  result = await readExpenseTotal({ telegramId: chatId, range, dateStart, dateEnd, groupBy } as any);
+                  break;
                 }
-              } else if (name === "get_memory") {
-                const key = String((argsObj as any).key || "").trim();
-                const item = key ? await getUserMemory(user.id, key) : null;
-                if (item) {
-                  result = { ok: true, key, price: item.price, unit: item.unit };
-                } else {
-                  result = { ok: false, error: "Data tidak ditemukan" };
+                case "save_memory": {
+                  const key = String((argsObj as any).key || "").trim();
+                  const price = toNumber((argsObj as any).price) ?? 0;
+                  const unit = String((argsObj as any).unit || "").trim();
+                  if (!key || !unit) {
+                    result = { ok: false, error: "Key dan unit wajib diisi" };
+                  } else {
+                    result = await saveUserMemory(user.id, key, { price, unit });
+                  }
+                  break;
                 }
-              } else if (name === "delete_memory") {
-                const key = String((argsObj as any).key || "").trim();
-                result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
-              } else if (name === "save_memory_many") {
-                const items = Array.isArray((argsObj as any).items) ? ((argsObj as any).items as any[]) : [];
-                const normalized = items
-                  .map((it) => ({
-                    key: String(it?.key || "").trim(),
-                    price: toNumber(it?.price) ?? 0,
-                    unit: String(it?.unit || "").trim(),
-                  }))
-                  .filter((it) => it.key && it.unit);
-                result = await saveMemoryMany(user.id, normalized as any);
-              } else if (name === "update_expense") {
-                result = await updateExpense(argsObj as any);
-              } else if (name === "delete_expense") {
-                const expenseId = String((argsObj as any).expenseId || "");
-                const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } }) : null;
-                result = existing ? await deleteExpense(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
-              } else if (name === "create_income") {
-                result = await createIncome({ ...argsObj, telegramId: chatId } as any);
-              } else if (name === "read_income") {
-                result = await readIncome({ ...argsObj, telegramId: chatId } as any);
-              } else if (name === "update_income") {
-                result = await updateIncome(argsObj as any);
-              } else if (name === "delete_income") {
-                const incomeId = String((argsObj as any).incomeId || "");
-                const existing = incomeId ? await prisma.income.findUnique({ where: { incomeId } }) : null;
-                result = existing ? await deleteIncome(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
-              } else {
-                result = { ok: false, error: "Perintah tidak dikenal" };
+                case "get_memory": {
+                  const key = String((argsObj as any).key || "").trim();
+                  const item = key ? await getUserMemory(user.id, key) : null;
+                  if (item) {
+                    result = { ok: true, key, price: item.price, unit: item.unit };
+                  } else {
+                    result = { ok: false, error: "Data tidak ditemukan" };
+                  }
+                  break;
+                }
+                case "delete_memory": {
+                  const key = String((argsObj as any).key || "").trim();
+                  result = key ? await deleteUserMemory(user.id, key) : { ok: false, error: "Key wajib diisi" };
+                  break;
+                }
+                case "save_memory_many": {
+                  const items = Array.isArray((argsObj as any).items) ? ((argsObj as any).items as any[]) : [];
+                  const normalized = items
+                    .map((it) => ({
+                      key: String(it?.key || "").trim(),
+                      price: toNumber(it?.price) ?? 0,
+                      unit: String(it?.unit || "").trim(),
+                    }))
+                    .filter((it) => it.key && it.unit);
+                  result = await saveMemoryMany(user.id, normalized as any);
+                  break;
+                }
+                case "update_expense":
+                  result = await updateExpense(argsObj as any);
+                  break;
+                case "delete_expense": {
+                  const expenseId = String((argsObj as any).expenseId || "");
+                  const existing = expenseId ? await prisma.expense.findUnique({ where: { expenseId }, include: { category: true } }) : null;
+                  result = existing ? await deleteExpense(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
+                  break;
+                }
+                case "create_income":
+                  result = await createIncome({ ...argsObj, telegramId: chatId } as any);
+                  break;
+                case "read_income":
+                  result = await readIncome({ ...argsObj, telegramId: chatId } as any);
+                  break;
+                case "update_income":
+                  result = await updateIncome(argsObj as any);
+                  break;
+                case "delete_income": {
+                  const incomeId = String((argsObj as any).incomeId || "");
+                  const existing = incomeId ? await prisma.income.findUnique({ where: { incomeId } }) : null;
+                  result = existing ? await deleteIncome(argsObj as any) : { ok: false, error: "Data tidak ditemukan" };
+                  break;
+                }
+                case "create_category": {
+                  const nameCat = String((argsObj as any).name || "").trim();
+                  const typeCat = String((argsObj as any).type || "").trim();
+                  const parentCategoryIdRaw = (argsObj as any).parentCategoryId ?? null;
+                  const parentCategoryId = parentCategoryIdRaw == null ? null : Number(parentCategoryIdRaw);
+                  const parentCategoryName = (argsObj as any).parentCategoryName ?? null;
+                  const isDefault = (argsObj as any).isDefault ?? null;
+                  if (!nameCat || (typeCat !== "INCOME" && typeCat !== "EXPENSE")) {
+                    result = { ok: false, error: "Nama dan tipe kategori wajib" };
+                  } else {
+                    result = await createUserCategory({ telegramId: chatId, name: nameCat, type: typeCat as any, parentCategoryId, parentCategoryName, isDefault: !!isDefault });
+                  }
+                  break;
+                }
+                case "seed_default_categories":
+                  result = await seedDefaultCategoriesByTelegramId(chatId);
+                  break;
+                default:
+                  result = { ok: false, error: "Perintah tidak dikenal" };
               }
               logger.info({ tool: name, args: argsObj, result }, "Tool call executed");
             } catch (toolErr: any) {
@@ -345,21 +399,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
 
             messages.push({ role: "assistant", tool_call_id: toolCall.id, content: JSON.stringify(result) });
 
-            // Catat percakapan dengan role TOOL untuk setiap eksekusi tool
-            try {
-              await createConversation({
-                userId: user.id,
-                message: JSON.stringify({ tool: name, args: argsObj, result }),
-                role: MessageRole.TOOL,
-                messageType: MessageType.TEXT,
-                toolUsed: name ?? null,
-                coinsUsed: null,
-                tokensIn: null,
-                tokensOut: null,
-              });
-            } catch (logErr: any) {
-              logger.warn({ tool: name, error: logErr?.message || logErr }, "Failed to log TOOL conversation");
-            }
+            logger.info({ tool: name, args: argsObj, result }, "Tool call executed");
           }
 
           continue;

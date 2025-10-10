@@ -1,5 +1,6 @@
 import logger from "./logger";
 import { prisma } from "./prisma";
+import { seedDefaultCategories } from "./CategoryService";
 
 export type UserParams = {
     telegramId: string;
@@ -17,5 +18,14 @@ export async function createOrUpdateUser(params: UserParams) {
         create: { telegramId, language, firstName, lastName },
     });
     logger.info(`[createOrUpdateUser] Upserted user: ${JSON.stringify(user)}` );
+    // Seed default categories if user has none
+    try {
+        const hasCategories = await prisma.category.count({ where: { userId: user.id } });
+        if (hasCategories === 0) {
+            await seedDefaultCategories(user.id);
+        }
+    } catch (e) {
+        logger.warn({ userId: user.id, error: (e as any)?.message || e }, "Seeding default categories failed");
+    }
     return user;
 }

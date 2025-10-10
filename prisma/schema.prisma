@@ -87,14 +87,18 @@ model Category {
   type      CategoryType
   isDefault Boolean     @default(false)
   userId    Int?
+  parentId  Int?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryHierarchy")
   expenses Expense[]
   incomes  Income[]
   budgets  Budget[]
 
+  @@unique([userId, name, type, parentId])
   @@map("categories")
 }
 
