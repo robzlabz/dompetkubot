@@ -1,0 +1,20 @@
+# VCS
+.git
+
+# Env files
+.env
+.env.*
+
+# Dependencies & build artifacts
+node_modules
+dist
+coverage
+
+# Prisma local folders
+.prisma
+
+# Logs & misc
+*.log
+Dockerfile
+.dockerignore
+.DS_Store

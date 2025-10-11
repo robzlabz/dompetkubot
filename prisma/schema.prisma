@@ -11,7 +11,7 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
+  id          Int      @id @default(autoincrement())
   telegramId  String   @unique
   username    String?
   firstName   String?
@@ -28,17 +28,18 @@ model User {
   wallet        Wallet?
   conversations Conversation[]
   vouchers      Voucher[]
+  memory        UserMemory?
 
   @@map("users")
 }
 
 model Expense {
-  id                    String        @id @default(cuid())
+  id                    Int           @id @default(autoincrement())
   expenseId             String        @unique
-  userId                String
+  userId                Int
   amount                Float
   description           String
-  categoryId            String
+  categoryId            Int
   calculationExpression String?
   receiptImageUrl       String?
   createdAt             DateTime      @default(now())
@@ -52,8 +53,8 @@ model Expense {
 }
 
 model ExpenseItem {
-  id         String  @id @default(cuid())
-  expenseId  String
+  id         Int     @id @default(autoincrement())
+  expenseId  Int
   name       String
   quantity   Int
   unitPrice  Float
@@ -65,11 +66,12 @@ model ExpenseItem {
 }
 
 model Income {
-  id          String   @id @default(cuid())
-  userId      String
+  id          Int      @id @default(autoincrement())
+  incomeId    String   @unique
+  userId      Int
   amount      Float
   description String
-  categoryId  String
+  categoryId  Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -80,26 +82,30 @@ model Income {
 }
 
 model Category {
-  id        String      @id @default(cuid())
+  id        Int         @id @default(autoincrement())
   name      String
   type      CategoryType
   isDefault Boolean     @default(false)
-  userId    String?
+  userId    Int?
+  parentId  Int?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryHierarchy")
   expenses Expense[]
   incomes  Income[]
   budgets  Budget[]
 
+  @@unique([userId, name, type, parentId])
   @@map("categories")
 }
 
 model Budget {
-  id         String       @id @default(cuid())
-  userId     String
-  categoryId String
+  id         Int          @id @default(autoincrement())
+  userId     Int
+  categoryId Int
   amount     Float
   period     BudgetPeriod
   startDate  DateTime
@@ -114,8 +120,8 @@ model Budget {
 }
 
 model Wallet {
-  id        String   @id @default(cuid())
-  userId    String   @unique
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
   balance   Float    @default(0)
   coins     Float    @default(0) // Float to support fractional coins (e.g., 0.5 coins per transaction)
   createdAt DateTime @default(now())
@@ -127,12 +133,12 @@ model Wallet {
 }
 
 model Voucher {
-  id        String      @id @default(cuid())
+  id        Int         @id @default(autoincrement())
   code      String      @unique
   type      VoucherType
   value     Float
   isUsed    Boolean     @default(false)
-  usedBy    String?
+  usedBy    Int?
   usedAt    DateTime?
   expiresAt DateTime?
   createdAt DateTime    @default(now())
@@ -143,11 +149,23 @@ model Voucher {
   @@map("vouchers")
 }
 
+model UserMemory {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_memories")
+}
+
 model Conversation {
-  id          String      @id @default(cuid())
-  userId      String
+  id          Int         @id @default(autoincrement())
+  userId      Int
   message     String
-  response    String
+  role        MessageRole
   messageType MessageType
   toolUsed    String?
   coinsUsed   Float?
@@ -201,4 +219,5 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+  TOOL
 }
