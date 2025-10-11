@@ -198,6 +198,7 @@ Ayo mulai catat keuanganmu sekarang! 💪✨`
       language: "id",
       firstName: ctx.chat.firstName || "User",
       lastName: ctx.chat.lastName || "",
+      username: ctx.chat.username || "",
     });
 
     // Ambil history conversation untuk context

@@ -7,6 +7,7 @@ export type UserParams = {
     language: string;
     firstName: string;
     lastName: string;
+    username: string;
 }
 
 export async function createOrUpdateUser(params: UserParams) {
