@@ -4,6 +4,8 @@ WORKDIR /app
 
 ENV TZ=Asia/Jakarta
 
+RUN apt-get update -y && apt-get install -y openssl
+
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
