@@ -1,83 +1,56 @@
-# Telegram Budget Bot
+# DompetkuBot (Go Edition)
 
-Indonesian Telegram bot for personal financial budgeting with AI-powered natural language processing.
+DompetkuBot adalah bot Telegram untuk pencatatan keuangan personal dengan pendekatan arsitektur heksagonal dan memanfaatkan model `gpt-4o-mini` melalui OpenAI API dengan basis URL kustom.
 
-## Features
+## Fitur Utama
 
-- 🤖 Natural language expense and income tracking in Indonesian
-- 💰 Budget management with real-time notifications
-- 📊 Financial insights and analytics
-- 🏦 Virtual wallet management
-- 📸 Receipt image processing
-- 🌐 Multi-language support (Indonesian/English)
+- 🤖 Agentic bot yang mampu mengekstrak transaksi keuangan dari bahasa alami pengguna.
+- 🧱 Arsitektur heksagonal dengan pemisahan domain, aplikasi, dan infrastruktur.
+- 📡 Integrasi dengan [go-telegram/bot](https://github.com/go-telegram/bot).
+- 🧠 Integrasi OpenAI Chat Completions dengan dukungan basis URL kustom.
+- ☁️ Penyimpanan media pada layanan S3 (atau fallback in-memory untuk pengembangan).
 
-## Tech Stack
-
-- **Runtime**: Bun
-- **Language**: TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Bot Framework**: GramIO
-- **AI**: OpenAI GPT
-- **Validation**: Zod
-
-## Getting Started
-
-### Prerequisites
-
-- Bun installed
-- PostgreSQL database
-- Telegram Bot Token
-- OpenAI API Key
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-
-3. Copy environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Configure your environment variables in `.env`
-
-5. Set up the database:
-   ```bash
-   bun run db:push
-   ```
-
-6. Start the development server:
-   ```bash
-   bun run dev
-   ```
-
-## Project Structure
+## Struktur Proyek
 
 ```
-src/
-├── config/          # Configuration files
-├── interfaces/      # TypeScript interfaces
-├── models/          # Data models with Zod validation
-├── repositories/    # Data access layer
-├── services/        # Business logic layer
-├── utils/           # Utility functions
-└── index.ts         # Application entry point
+cmd/bot              # Entrypoint aplikasi
+internal/
+  application/       # Agent, use case, dan port
+  config/            # Loader konfigurasi
+  domain/            # Entitas dan value object
+  infrastructure/    # Adapter (AI, Telegram, Storage)
+  pkg/logging/       # Utilitas logging
 ```
 
-## Scripts
+## Konfigurasi
 
-- `bun run dev` - Start development server with hot reload
-- `bun run start` - Start production server
-- `bun run build` - Build for production
-- `bun run test` - Run tests
-- `bun run db:generate` - Generate Prisma client
-- `bun run db:push` - Push schema to database
-- `bun run db:migrate` - Run database migrations
-- `bun run db:studio` - Open Prisma Studio
+Set variabel lingkungan berikut sebelum menjalankan bot:
 
-## License
+| Variabel | Keterangan |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Token bot Telegram. |
+| `TELEGRAM_BASE_URL` | Opsional. Basis URL API Telegram kustom. |
+| `OPENAI_API_KEY` | Kunci API untuk layanan OpenAI kompatibel. |
+| `OPENAI_BASE_URL` | Basis URL endpoint OpenAI (mis. `https://api.openai.com`). |
+| `OPENAI_MODEL` | Opsional, default `gpt-4o-mini`. |
+| `OPENAI_TIMEOUT` | Opsional, durasi timeout, default `30s`. |
+| `S3_BUCKET` | Nama bucket S3 untuk menyimpan media. Jika kosong akan fallback ke penyimpanan memory. |
+| `S3_REGION` | Region bucket S3. |
+| `S3_ACCESS_KEY_ID` | Opsional, kredensial akses. |
+| `S3_SECRET_ACCESS_KEY` | Opsional, kredensial akses. |
+| `S3_ENDPOINT` | Opsional, endpoint S3 kustom (mis. MinIO). |
+| `S3_USE_PATH_STYLE` | Opsional, gunakan path-style addressing (`true/false`). |
+| `LOG_LEVEL` | Opsional, level log (`debug`, `info`, `warn`, `error`). |
+
+## Menjalankan Bot
+
+```bash
+go mod tidy
+go run ./cmd/bot
+```
+
+Bot akan terus berjalan hingga menerima sinyal `SIGINT`/`SIGTERM`.
+
+## Lisensi
 
 MIT
